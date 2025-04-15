@@ -1,0 +1,101 @@
+# Docker Compose for Eventia Ticketing Platform - Production Environment
+
+version: '3.8'
+
+services:
+  frontend:
+    container_name: eventia-frontend-prod
+    build:
+      context: ./eventia-ticketing-flow
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=https://api.eventia.com/api
+    depends_on:
+      - backend
+    networks:
+      - eventia-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    container_name: eventia-backend-prod
+    build:
+      context: ./eventia-backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      - FLASK_ENV=production
+      - PORT=3003
+      - MONGO_URI=mongodb://mongodb:27017/eventia
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-supersecuretoken123}
+    depends_on:
+      - mongodb
+    networks:
+      - eventia-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mongodb:
+    container_name: eventia-mongodb-prod
+    image: mongo:6.0
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - eventia-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  nginx:
+    image: nginx:alpine
+    container_name: eventia-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    depends_on:
+      - backend
+    networks:
+      - eventia-network
+    restart: always
+
+  certbot:
+    image: certbot/certbot
+    container_name: eventia-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    depends_on:
+      - nginx
+
+networks:
+  eventia-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    name: eventia_mongodb_data_prod

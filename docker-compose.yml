@@ -1,0 +1,87 @@
+# Docker Compose for Eventia Ticketing Platform
+
+services:
+  frontend:
+    container_name: eventia-frontend
+    build:
+      context: ./eventia-ticketing-flow
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./eventia-ticketing-flow:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:3002/api
+    depends_on:
+      - backend
+    networks:
+      - eventia-network
+
+  backend:
+    container_name: eventia-backend
+    build:
+      context: ./eventia-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./eventia-backend:/app
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=flask_server.py
+      - MONGO_URI=mongodb://mongodb:27017/eventia
+      - ADMIN_TOKEN=admin_secret_token
+    depends_on:
+      - mongodb
+    networks:
+      - eventia-network
+
+  mongodb:
+    container_name: eventia-mongodb
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=eventia
+    networks:
+      - eventia-network
+
+  mongo-express:
+    container_name: eventia-admin
+    image: mongo-express:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin_secret
+    depends_on:
+      - mongodb
+    networks:
+      - eventia-network
+
+  nginx:
+    container_name: eventia-nginx
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd
+    depends_on:
+      - mongo-express
+    networks:
+      - eventia-network
+
+networks:
+  eventia-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:

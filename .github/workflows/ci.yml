@@ -1,0 +1,175 @@
+name: Eventia CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.11]
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        cd eventia-backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Test with pytest
+      run: |
+        cd eventia-backend
+        python -m pytest tests/test_flask_server.py --cov=. --cov-report=xml
+    
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./eventia-backend/coverage.xml
+        fail_ci_if_error: true
+    
+    - name: Run performance tests
+      run: |
+        cd eventia-backend
+        python flask_server.py &
+        sleep 5
+        python -m locust -f tests/locustfile.py --host=http://localhost:3002 --users=50 --spawn-rate=10 --run-time=30s --headless --html=locust-report.html
+    
+    - name: Upload performance test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-test-report
+        path: eventia-backend/locust-report.html
+  
+  frontend-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+        cache-dependency-path: eventia-ticketing-flow/yarn.lock
+    
+    - name: Install dependencies
+      run: |
+        cd eventia-ticketing-flow
+        yarn install
+    
+    - name: Run tests
+      run: |
+        cd eventia-ticketing-flow
+        yarn test
+  
+  e2e-tests:
+    needs: [backend-tests, frontend-tests]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install Python dependencies
+      run: |
+        cd eventia-backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+        cache: 'yarn'
+        cache-dependency-path: eventia-ticketing-flow/yarn.lock
+    
+    - name: Install Node dependencies
+      run: |
+        cd eventia-ticketing-flow
+        yarn install
+    
+    - name: Install Playwright
+      run: |
+        cd eventia-ticketing-flow
+        npx playwright install --with-deps
+    
+    - name: Start backend server
+      run: |
+        cd eventia-backend
+        python flask_server.py &
+        sleep 5
+    
+    - name: Start frontend
+      run: |
+        cd eventia-ticketing-flow
+        yarn start &
+        sleep 10
+    
+    - name: Run Playwright tests
+      run: |
+        cd eventia-backend
+        mkdir -p tests/screenshots
+        npx playwright test tests/e2e.js
+    
+    - name: Upload test screenshots
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-screenshots
+        path: eventia-backend/tests/screenshots
+
+  deploy:
+    needs: [e2e-tests]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build and push Docker images
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: false
+        tags: eventia/ticketing:latest
+    
+    - name: Send Slack notification
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author,action,eventName,workflow
+        mention: here
+        if_mention: failure
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      if: always() 

@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for building Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 3003
+
+ENV PYTHONPATH=/app
+ENV FLASK_APP=flask_server.py
+ENV FLASK_ENV=development
+ENV DEBUG=True
+
+CMD ["python", "flask_server.py"] 

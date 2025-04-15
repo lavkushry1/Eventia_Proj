@@ -1,0 +1,47 @@
+groups:
+- name: eventia-backend
+  rules:
+  - alert: HighErrorRate
+    expr: sum(rate(api_endpoint_error_count{job="eventia-backend"}[5m])) / sum(rate(api_endpoint_request_count{job="eventia-backend"}[5m])) > 0.01
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API error rate"
+      description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+  - alert: HighResponseTime
+    expr: api_endpoint_response_time_ms{job="eventia-backend", metric="avg"} > 500
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API response time"
+      description: "Endpoint {{ $labels.path }} has average response time of {{ $value }}ms"
+      
+  - alert: HighMemoryUsage
+    expr: process_resident_memory_bytes{job="eventia-backend"} > 500 * 1024 * 1024
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage"
+      description: "Memory usage is {{ $value | humanizeBytes }} (>500MB)"
+      
+  - alert: BackendDown
+    expr: up{job="eventia-backend"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Backend service is down"
+      description: "The Eventia backend service has been down for more than 1 minute"
+      
+  - alert: FrontendDown
+    expr: up{job="eventia-frontend"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Frontend service is down"
+      description: "The Eventia frontend service has been down for more than 1 minute" 
