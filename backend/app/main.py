@@ -36,6 +36,10 @@ app.add_middleware(
 uploads_dir = Path(__file__).parent / "static" / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 
+# Create teams directory if it doesn't exist
+teams_dir = Path(__file__).parent / "static" / "teams"
+teams_dir.mkdir(parents=True, exist_ok=True)
+
 # Middleware for request ID and logging
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
@@ -102,6 +106,9 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Mount static files directory for uploads
 app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")
+
+# Mount specific static directory for team logos
+app.mount("/static/teams", StaticFiles(directory=str(teams_dir)), name="teams")
 
 # Startup and shutdown events
 @app.on_event("startup")

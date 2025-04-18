@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock } from 'lucide-react';
 import AnimatedButton from '@/components/ui/AnimatedButton';
 import TeamBadge from '@/components/TeamBadge';
+import TeamLogo from '@/components/TeamLogo';
 import { UIEvent } from '@/lib/adapters';
 
 interface EventCardProps {
@@ -44,18 +45,32 @@ const EventCard = ({ event }: EventCardProps) => {
         
         {/* Team badges for IPL matches */}
         {isIplMatch && (
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-2">
-            <TeamBadge 
-              team={event.teams?.team1.shortName || ''} 
-              className="text-xs" 
-              color={event.teams?.team1.color} 
-            />
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center space-x-2">
+            <div className="flex items-center">
+              <TeamLogo 
+                teamCode={event.teams?.team1.shortName || ''} 
+                size={24}
+                className="mr-1" 
+              />
+              <TeamBadge 
+                team={event.teams?.team1.shortName || ''} 
+                className="text-xs" 
+                color={event.teams?.team1.color} 
+              />
+            </div>
             <span className="bg-white px-2 py-1 rounded text-xs font-medium">vs</span>
-            <TeamBadge 
-              team={event.teams?.team2.shortName || ''} 
-              className="text-xs" 
-              color={event.teams?.team2.color} 
-            />
+            <div className="flex items-center">
+              <TeamLogo 
+                teamCode={event.teams?.team2.shortName || ''} 
+                size={24}
+                className="mr-1" 
+              />
+              <TeamBadge 
+                team={event.teams?.team2.shortName || ''} 
+                className="text-xs" 
+                color={event.teams?.team2.color} 
+              />
+            </div>
           </div>
         )}
       </div>

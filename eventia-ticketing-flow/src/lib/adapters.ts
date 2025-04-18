@@ -126,13 +126,13 @@ export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent): UIEvent => {
       team1: {
         name: apiEvent.team_home.name,
         shortName: getTeamShortName(apiEvent.team_home.name),
-        logo: apiEvent.team_home.logo || `teams/${apiEvent.team_home.name.toLowerCase().replace(/\s+/g, '-')}.svg`,
+        logo: apiEvent.team_home.code ? `/assets/teams/${apiEvent.team_home.code.toLowerCase()}.png` : undefined,
         color: apiEvent.team_home.primary_color || apiEvent.team_home.color
       },
       team2: {
         name: apiEvent.team_away.name,
         shortName: getTeamShortName(apiEvent.team_away.name),
-        logo: apiEvent.team_away.logo || `teams/${apiEvent.team_away.name.toLowerCase().replace(/\s+/g, '-')}.svg`,
+        logo: apiEvent.team_away.code ? `/assets/teams/${apiEvent.team_away.code.toLowerCase()}.png` : undefined,
         color: apiEvent.team_away.primary_color || apiEvent.team_away.color
       }
     };
@@ -143,17 +143,20 @@ export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent): UIEvent => {
     const teamNames = apiEvent.title.split("vs").map((t: string) => t.trim());
     
     if (teamNames.length === 2) {
+      const team1Code = getTeamShortName(teamNames[0]).toLowerCase();
+      const team2Code = getTeamShortName(teamNames[1]).toLowerCase();
+      
       teams = {
         team1: {
           name: teamNames[0],
           shortName: getTeamShortName(teamNames[0]),
-          logo: `/teams/${teamNames[0].toLowerCase().replace(/\s+/g, '-')}.svg`,
+          logo: `/assets/teams/${team1Code}.png`,
           color: "#004BA0" // Default blue
         },
         team2: {
           name: teamNames[1],
           shortName: getTeamShortName(teamNames[1]),
-          logo: `/teams/${teamNames[1].toLowerCase().replace(/\s+/g, '-')}.svg`,
+          logo: `/assets/teams/${team2Code}.png`,
           color: "#FFFF00" // Default yellow
         }
       };

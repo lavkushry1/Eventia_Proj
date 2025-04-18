@@ -1,0 +1,11 @@
+{
+  "name": "eventia-team-logos",
+  "version": "1.0.0",
+  "description": "Generate team logo placeholders for Eventia",
+  "private": true,
+  "scripts": {
+    "generate-logos": "node generate_team_logos.js"
+  },
+  "dependencies": {
+  }
+} 
