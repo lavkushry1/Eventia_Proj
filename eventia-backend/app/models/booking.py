@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Roni Laukkarinen
+# @Date:   2025-04-18 17:01:14
+# @Last Modified by:   Roni Laukkarinen
+# @Last Modified time: 2025-04-18 23:31:24
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
@@ -90,6 +95,9 @@ class BookingBase(BaseModel):
     customer_info: CustomerInfo = Field(..., description="Customer information")
     tickets: List[TicketItem] = Field(..., description="List of ticket items")
     total_amount: float = Field(..., description="Total amount of the booking")
+    discount_code: Optional[str] = Field(None, description="Applied discount code")
+    discount_amount: Optional[float] = Field(None, description="Amount discounted from total")
+    final_amount: Optional[float] = Field(None, description="Final amount after discount")
     booking_date: datetime = Field(default_factory=datetime.now, description="Date and time of booking")
     expiry_date: Optional[datetime] = Field(None, description="Expiry date for pending bookings")
     payment: PaymentDetails = Field(..., description="Payment details")
@@ -220,4 +228,4 @@ class PaymentVerificationRequest(BaseModel):
     def validate_utr(cls, v):
         if not v or len(v) < 8:
             raise ValueError("UTR must be at least 8 characters")
-        return v 
+        return v

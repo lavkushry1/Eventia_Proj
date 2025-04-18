@@ -1,0 +1,160 @@
+name: SSL Certificate Issuance
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  issue-ssl-certificates:
+    name: Issue SSL certificates
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up DNS verification
+        id: dns-setup
+        run: |
+          # Install required tools
+          sudo apt-get update
+          sudo apt-get install -y dig dnsutils curl jq
+          
+          # Set domain variables based on environment
+          if [[ "${{ inputs.environment }}" == "production" ]]; then
+            echo "DOMAIN=api.eventia.live" >> $GITHUB_ENV
+          else
+            echo "DOMAIN=api.staging.eventia.live" >> $GITHUB_ENV
+          fi
+          
+          # Create DNS verification script
+          cat > verify-dns.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          
+          DOMAIN="${1}"
+          echo "Verifying DNS propagation for ${DOMAIN}..."
+          
+          # Check A record
+          A_RECORD=$(dig +short ${DOMAIN})
+          if [ -z "$A_RECORD" ]; then
+            echo "❌ A record for ${DOMAIN} not found"
+            exit 1
+          else
+            echo "✅ A record for ${DOMAIN}: ${A_RECORD}"
+          fi
+          
+          # Check CAA records
+          CAA_RECORD=$(dig +short caa ${DOMAIN})
+          if [[ "$CAA_RECORD" != *"letsencrypt.org"* ]] && [ -n "$CAA_RECORD" ]; then
+            echo "⚠️ CAA record does not allow Let's Encrypt: ${CAA_RECORD}"
+          elif [ -n "$CAA_RECORD" ]; then
+            echo "✅ CAA record allows Let's Encrypt: ${CAA_RECORD}"
+          else
+            echo "ℹ️ No CAA record found (this is acceptable)"
+          fi
+          
+          # Check DNSSEC
+          DNSSEC=$(dig +dnssec +short ${DOMAIN} | grep -c "RRSIG" || true)
+          if [ "$DNSSEC" -gt 0 ]; then
+            echo "✅ DNSSEC is enabled for ${DOMAIN}"
+          else
+            echo "⚠️ DNSSEC is not enabled for ${DOMAIN}"
+          fi
+          
+          echo "DNS verification completed for ${DOMAIN}"
+          EOF
+          
+          chmod +x verify-dns.sh
+          ./verify-dns.sh ${{ env.DOMAIN }}
+      
+      - name: Install acme.sh
+        run: |
+          curl https://get.acme.sh | sh -s email=${{ secrets.ACME_ACCOUNT_EMAIL }}
+          
+      - name: Issue certificates with DNS challenge
+        id: issue-cert
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY: ${{ secrets.GCP_SSL_SA }}
+          DOMAIN: ${{ env.DOMAIN }}
+        run: |
+          # Authenticate with GCP
+          echo "$GCP_SA_KEY" > gcp-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/gcp-key.json"
+          
+          # Issue certificate with DNS challenge
+          ~/.acme.sh/acme.sh --issue --dns dns_gcloud \
+            -d ${DOMAIN} \
+            --dnssleep 60 \
+            --keylength 2048 \
+            --key-file ./privkey.pem \
+            --fullchain-file ./fullchain.pem \
+            --cert-file ./cert.pem \
+            --ca-file ./chain.pem
+            
+          # Verify certificate
+          openssl x509 -in ./fullchain.pem -text -noout | grep "Not After"
+          
+          # Check certificate transparency
+          echo "Checking Certificate Transparency logs..."
+          CERT_FINGERPRINT=$(openssl x509 -in ./fullchain.pem -noout -fingerprint -sha256 | cut -d'=' -f2 | tr -d ':')
+          curl -s "https://crt.sh/?q=${CERT_FINGERPRINT}&output=json" | jq .
+      
+      - name: Store certificates in Secret Manager
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          DOMAIN: ${{ env.DOMAIN }}
+        run: |
+          # Store certificates in Secret Manager
+          echo "Storing certificates in Secret Manager..."
+          
+          # Create or update fullchain secret
+          cat ./fullchain.pem | gcloud secrets create "${DOMAIN//./-}-fullchain" \
+            --project=${GCP_PROJECT_ID} \
+            --replication-policy="automatic" \
+            --data-file=- || \
+          cat ./fullchain.pem | gcloud secrets versions add "${DOMAIN//./-}-fullchain" \
+            --project=${GCP_PROJECT_ID} \
+            --data-file=-
+            
+          # Create or update privkey secret
+          cat ./privkey.pem | gcloud secrets create "${DOMAIN//./-}-privkey" \
+            --project=${GCP_PROJECT_ID} \
+            --replication-policy="automatic" \
+            --data-file=- || \
+          cat ./privkey.pem | gcloud secrets versions add "${DOMAIN//./-}-privkey" \
+            --project=${GCP_PROJECT_ID} \
+            --data-file=-
+            
+          echo "Certificate stored successfully in Secret Manager"
+          
+      - name: Send notification
+        if: always()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_SSL }}
+          DOMAIN: ${{ env.DOMAIN }}
+          STATUS: ${{ job.status }}
+        run: |
+          # Set color based on status
+          if [[ "$STATUS" == "success" ]]; then
+            COLOR="good"
+            ICON="✅"
+          else
+            COLOR="danger"
+            ICON="❌"
+          fi
+          
+          # Send Slack notification
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"attachments\":[{\"color\":\"${COLOR}\",\"title\":\"${ICON} SSL Certificate Issuance - ${DOMAIN}\",\"text\":\"Status: ${STATUS}\nEnvironment: ${{ inputs.environment }}\nTriggered by: ${{ github.actor }}\"}]}" \
+            $SLACK_WEBHOOK 

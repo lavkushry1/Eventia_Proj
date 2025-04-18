@@ -3,7 +3,7 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { DiscountManagement } from '@/components/DiscountManagement';
 import { Helmet } from 'react-helmet-async';
 
-const AdminDiscountManagement = () => {
+const AdminDiscountsPage = () => {
   return (
     <AdminLayout>
       <Helmet>
@@ -14,4 +14,4 @@ const AdminDiscountManagement = () => {
   );
 };
 
-export default AdminDiscountManagement;
+export default AdminDiscountsPage;

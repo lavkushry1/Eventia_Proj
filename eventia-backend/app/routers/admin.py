@@ -1,12 +1,21 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status, Form
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status, Form, Query, Body
 from fastapi.responses import JSONResponse
-from pathlib import Path
-import shutil
-import os
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+import json
 
 from ..middleware.admin_auth import admin_required
 from ..models.user import User
 from ..core.database import get_database
+from ..utils.discount_analytics import get_discount_usage_stats, get_discount_effectiveness_report
+from ..models.discount import (
+    get_discounts,
+    get_discount_by_id,
+    create_discount,
+    update_discount,
+    delete_discount
+)
+from ..core.base import create_success_response, create_error_response
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -135,4 +144,4 @@ async def upload_team_logo(
     return JSONResponse(content={
         "message": "Team logo uploaded successfully",
         "image_url": f"/static/teams/{new_filename}"
-    }) 
+    })

@@ -1,0 +1,270 @@
+name: SSL Certificate Renewal
+
+on:
+  schedule:
+    # Run monthly on the 1st at 01:00 UTC
+    - cron: '0 1 1 * *'
+  workflow_dispatch:
+    inputs:
+      force_renewal:
+        description: 'Force certificate renewal'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  check-certificates:
+    name: Check Certificate Expiry
+    runs-on: ubuntu-latest
+    outputs:
+      needs_renewal: ${{ steps.check.outputs.needs_renewal }}
+      domains: ${{ steps.check.outputs.domains }}
+    
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl openssl jq
+      
+      - name: Check certificate expiry
+        id: check
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY: ${{ secrets.GCP_SSL_SA }}
+        run: |
+          # List of domains to check
+          DOMAINS=("api.eventia.live" "eventia.live")
+          DOMAINS_TO_RENEW=()
+          
+          # Authenticate with GCP
+          echo "$GCP_SA_KEY" > gcp-key.json
+          gcloud auth activate-service-account --key-file=gcp-key.json
+          gcloud config set project ${GCP_PROJECT_ID}
+          
+          for DOMAIN in "${DOMAINS[@]}"; do
+            echo "Checking certificate for ${DOMAIN}..."
+            
+            # Get certificate from Secret Manager
+            SECRET_NAME="${DOMAIN//./-}-fullchain"
+            
+            if gcloud secrets versions list ${SECRET_NAME} &>/dev/null; then
+              # Certificate exists in Secret Manager, check expiry
+              gcloud secrets versions access latest --secret=${SECRET_NAME} > fullchain.pem
+              
+              # Get expiry date
+              EXPIRY=$(openssl x509 -enddate -noout -in fullchain.pem | cut -d= -f2)
+              EXPIRY_SECONDS=$(date -d "${EXPIRY}" +%s)
+              CURRENT_SECONDS=$(date +%s)
+              DAYS_LEFT=$(( (EXPIRY_SECONDS - CURRENT_SECONDS) / 86400 ))
+              
+              echo "${DOMAIN} certificate expires in ${DAYS_LEFT} days"
+              
+              # If less than 30 days or force renewal, add to renewal list
+              if [[ ${DAYS_LEFT} -lt 30 || "${{ inputs.force_renewal }}" == "true" ]]; then
+                echo "${DOMAIN} needs renewal"
+                DOMAINS_TO_RENEW+=("${DOMAIN}")
+              fi
+            else
+              # Certificate doesn't exist in Secret Manager
+              echo "${DOMAIN} certificate not found in Secret Manager, will issue new certificate"
+              DOMAINS_TO_RENEW+=("${DOMAIN}")
+            fi
+          done
+          
+          # Set output variables
+          if [[ ${#DOMAINS_TO_RENEW[@]} -gt 0 ]]; then
+            echo "needs_renewal=true" >> $GITHUB_OUTPUT
+            echo "domains=$(echo ${DOMAINS_TO_RENEW[@]} | tr ' ' ',')" >> $GITHUB_OUTPUT
+            echo "Domains requiring renewal: ${DOMAINS_TO_RENEW[@]}"
+          else
+            echo "needs_renewal=false" >> $GITHUB_OUTPUT
+            echo "domains=" >> $GITHUB_OUTPUT
+            echo "No domains require renewal at this time"
+          fi
+  
+  renew-certificates:
+    name: Renew Certificates
+    needs: check-certificates
+    if: needs.check-certificates.outputs.needs_renewal == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install acme.sh
+        run: |
+          curl https://get.acme.sh | sh -s email=${{ secrets.ACME_ACCOUNT_EMAIL }}
+      
+      - name: Renew certificates
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY: ${{ secrets.GCP_SSL_SA }}
+          DOMAINS: ${{ needs.check-certificates.outputs.domains }}
+        run: |
+          # Authenticate with GCP
+          echo "$GCP_SA_KEY" > gcp-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/gcp-key.json"
+          
+          # Process each domain
+          IFS=',' read -ra DOMAIN_ARRAY <<< "$DOMAINS"
+          for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
+            echo "Renewing certificate for ${DOMAIN}..."
+            
+            # Create backup of existing certificate if it exists
+            SECRET_NAME="${DOMAIN//./-}-fullchain"
+            if gcloud secrets versions list ${SECRET_NAME} &>/dev/null; then
+              echo "Creating backup of existing certificate..."
+              gcloud secrets versions access latest --secret=${SECRET_NAME} > ${DOMAIN}-fullchain-backup.pem
+              gcloud secrets versions access latest --secret=${DOMAIN//./-}-privkey > ${DOMAIN}-privkey-backup.pem
+            fi
+            
+            # Issue new certificate with DNS challenge
+            ~/.acme.sh/acme.sh --issue --dns dns_gcloud \
+              -d ${DOMAIN} \
+              --dnssleep 60 \
+              --keylength 2048 \
+              --key-file ./${DOMAIN}-privkey.pem \
+              --fullchain-file ./${DOMAIN}-fullchain.pem \
+              --cert-file ./${DOMAIN}-cert.pem \
+              --ca-file ./${DOMAIN}-chain.pem
+              
+            # Verify new certificate
+            if openssl x509 -in ./${DOMAIN}-fullchain.pem -noout -checkend 2592000; then
+              echo "Certificate renewed successfully and is valid for at least 30 days"
+              
+              # Store new certificate in Secret Manager
+              cat ./${DOMAIN}-fullchain.pem | gcloud secrets versions add "${DOMAIN//./-}-fullchain" \
+                --project=${GCP_PROJECT_ID} \
+                --data-file=-
+                
+              cat ./${DOMAIN}-privkey.pem | gcloud secrets versions add "${DOMAIN//./-}-privkey" \
+                --project=${GCP_PROJECT_ID} \
+                --data-file=-
+                
+              echo "New certificate stored in Secret Manager"
+            else
+              echo "Error: New certificate validation failed, restoring backup if available"
+              
+              if [[ -f "${DOMAIN}-fullchain-backup.pem" ]]; then
+                cat ./${DOMAIN}-fullchain-backup.pem | gcloud secrets versions add "${DOMAIN//./-}-fullchain" \
+                  --project=${GCP_PROJECT_ID} \
+                  --data-file=-
+                  
+                cat ./${DOMAIN}-privkey-backup.pem | gcloud secrets versions add "${DOMAIN//./-}-privkey" \
+                  --project=${GCP_PROJECT_ID} \
+                  --data-file=-
+                  
+                echo "Backup certificate restored"
+              fi
+              
+              # Fail the workflow if certificate validation fails
+              exit 1
+            fi
+          done
+      
+      - name: Update certificates in Cloud Run
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          DOMAINS: ${{ needs.check-certificates.outputs.domains }}
+        run: |
+          # Update certificates in Cloud Run services
+          IFS=',' read -ra DOMAIN_ARRAY <<< "$DOMAINS"
+          
+          # Map domains to services
+          for DOMAIN in "${DOMAIN_ARRAY[@]}"; do
+            if [[ "$DOMAIN" == "api.eventia.live" ]]; then
+              SERVICE_NAME="eventia-backend"
+            elif [[ "$DOMAIN" == "eventia.live" ]]; then
+              SERVICE_NAME="eventia-frontend"
+            else
+              continue
+            fi
+            
+            echo "Updating certificates for Cloud Run service ${SERVICE_NAME}..."
+            
+            # Update service with new certificate
+            gcloud run services update ${SERVICE_NAME} \
+              --region=${GCP_REGION} \
+              --set-secrets="SSL_CERT=${DOMAIN//./-}-fullchain:latest,SSL_KEY=${DOMAIN//./-}-privkey:latest" \
+              --project=${GCP_PROJECT_ID}
+          done
+      
+      - name: Send notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_SSL }}
+          DOMAINS: ${{ needs.check-certificates.outputs.domains }}
+        run: |
+          # Create message
+          DOMAINS_TEXT=$(echo $DOMAINS | tr ',' ', ')
+          MESSAGE="SSL certificates have been renewed for the following domains: ${DOMAINS_TEXT}"
+          
+          # Send Slack notification
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"attachments\":[{\"color\":\"good\",\"title\":\"✅ SSL Certificate Renewal\",\"text\":\"${MESSAGE}\"}]}" \
+            $SLACK_WEBHOOK
+  
+  monitor-ssl-health:
+    name: SSL Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check SSL health
+        run: |
+          # Install tools
+          sudo apt-get update
+          sudo apt-get install -y curl openssl jq
+          
+          # Domains to check
+          DOMAINS=("api.eventia.live" "eventia.live")
+          
+          for DOMAIN in "${DOMAINS[@]}"; do
+            echo "Checking SSL health for ${DOMAIN}..."
+            
+            # Check SSL connection
+            if ! curl -s -I --connect-timeout 5 https://${DOMAIN} >/dev/null; then
+              echo "❌ Cannot connect to ${DOMAIN} via HTTPS"
+              continue
+            fi
+            
+            # Check SSL certificate with OpenSSL
+            echo | openssl s_client -servername ${DOMAIN} -connect ${DOMAIN}:443 2>/dev/null | openssl x509 -noout -dates
+            
+            # Check security headers
+            HEADERS=$(curl -s -I https://${DOMAIN} | grep -i 'strict-transport-security\|content-security-policy\|x-content-type-options\|x-frame-options\|x-xss-protection' | wc -l)
+            echo "Security headers found: ${HEADERS}"
+            
+            # Check SSL Labs grade if API key is available
+            if [[ -n "${{ secrets.SSLLABS_API_KEY }}" ]]; then
+              echo "Checking SSL Labs score for ${DOMAIN}..."
+              
+              # Start new assessment
+              curl -s "https://api.ssllabs.com/api/v3/analyze?host=${DOMAIN}&startNew=on" > /dev/null
+              
+              # Wait for assessment to complete
+              sleep 30
+              DONE="false"
+              
+              while [[ "$DONE" != "true" && "$DONE" != "ERROR" ]]; do
+                ASSESSMENT=$(curl -s "https://api.ssllabs.com/api/v3/analyze?host=${DOMAIN}")
+                DONE=$(echo $ASSESSMENT | jq -r '.status')
+                
+                if [[ "$DONE" == "READY" || "$DONE" == "ERROR" ]]; then
+                  break
+                fi
+                
+                echo "Assessment in progress, waiting..."
+                sleep 30
+              done
+              
+              # Get the grade
+              GRADE=$(echo $ASSESSMENT | jq -r '.endpoints[0].grade')
+              echo "SSL Labs grade for ${DOMAIN}: ${GRADE}"
+              
+              # Check if grade is acceptable
+              if [[ "$GRADE" != "A+" && "$GRADE" != "A" ]]; then
+                echo "⚠️ SSL grade ${GRADE} for ${DOMAIN} is below A/A+"
+              fi
+            fi
+          done 

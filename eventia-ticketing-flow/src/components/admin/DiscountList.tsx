@@ -38,9 +38,12 @@ import {
   DollarSign, 
   Clock, 
   Info, 
-  Filter
+  Filter,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
 
 interface Discount {
   _id: string;
@@ -86,21 +89,49 @@ const DiscountList: React.FC<DiscountListProps> = ({
     return matchesSearch && matchesActiveFilter;
   });
 
-  // Check if a discount is expired
-  const isExpired = (validTill: string): boolean => {
-    return new Date(validTill) < new Date();
+  // Helper function to format dates
+  const formatDate = (dateString: string) => {
+    return format(new Date(dateString), 'MMM dd, yyyy');
   };
 
-  // Format date for display
-  const formatDate = (dateStr: string): string => {
-    return new Date(dateStr).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  // Calculate usage percentage
+  const calculateUsage = (used: number, max: number) => {
+    if (max === 0) return "∞"; // If unlimited uses
+    return `${used}/${max} (${Math.round((used / max) * 100)}%)`;
   };
+
+  // Get discount badge variant based on status
+  const getStatusBadge = (discount: Discount) => {
+    const now = new Date();
+    const validFrom = new Date(discount.valid_from);
+    const validTill = new Date(discount.valid_till);
+    
+    if (!discount.active) {
+      return <Badge variant="outline" className="bg-gray-100">Inactive</Badge>;
+    } else if (now < validFrom) {
+      return <Badge variant="outline" className="bg-blue-100">Scheduled</Badge>;
+    } else if (now > validTill) {
+      return <Badge variant="outline" className="bg-red-100">Expired</Badge>;
+    } else if (discount.max_uses > 0 && discount.used_count >= discount.max_uses) {
+      return <Badge variant="outline" className="bg-amber-100">Exhausted</Badge>;
+    } else {
+      return <Badge variant="outline" className="bg-green-100">Active</Badge>;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Discount Codes</CardTitle>
+          <CardDescription>Manage your discount codes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -144,152 +175,82 @@ const DiscountList: React.FC<DiscountListProps> = ({
           </DropdownMenu>
         </div>
 
-        {isLoading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableCaption>List of discount codes</TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead>Usage</TableHead>
-                  <TableHead>Valid Period</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Code</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Value</TableHead>
+              <TableHead>Valid Period</TableHead>
+              <TableHead>Usage</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {discounts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-6">
+                  No discount codes found. Create your first discount code!
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredDiscounts.map((discount) => (
+                <TableRow key={discount._id}>
+                  <TableCell className="font-medium">{discount.discount_code}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center">
+                      {discount.discount_type === 'percentage' ? (
+                        <Percent className="h-4 w-4 mr-1" />
+                      ) : (
+                        <DollarSign className="h-4 w-4 mr-1" />
+                      )}
+                      {discount.discount_type === 'percentage' ? 'Percentage' : 'Fixed'}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {discount.discount_type === 'percentage' ? `${discount.value}%` : `₹${discount.value}`}
+                  </TableCell>
+                  <TableCell>
+                    {formatDate(discount.valid_from)} to {formatDate(discount.valid_till)}
+                  </TableCell>
+                  <TableCell>
+                    {calculateUsage(discount.used_count, discount.max_uses)}
+                  </TableCell>
+                  <TableCell>
+                    {getStatusBadge(discount)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => onEdit(discount)}>
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => onDelete(discount.discount_code)}>
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onToggle(discount.discount_code)}
+                      >
+                        {discount.active ? (
+                          <ToggleRight className="h-4 w-4" />
+                        ) : (
+                          <ToggleLeft className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">
+                          {discount.active ? 'Deactivate' : 'Activate'}
+                        </span>
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDiscounts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                      No discount codes found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredDiscounts.map((discount) => {
-                    const expired = isExpired(discount.valid_till);
-                    
-                    return (
-                      <TableRow key={discount._id}>
-                        <TableCell className="font-mono font-medium">
-                          {discount.discount_code}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {discount.discount_type === 'percentage' ? (
-                              <Percent className="h-4 w-4 mr-1" />
-                            ) : (
-                              <DollarSign className="h-4 w-4 mr-1" />
-                            )}
-                            {discount.discount_type === 'percentage' ? 'Percentage' : 'Fixed'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {discount.discount_type === 'percentage'
-                            ? `${discount.value}%`
-                            : `₹${discount.value}`
-                          }
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <span className="font-medium">{discount.used_count}</span>
-                            <span className="text-muted-foreground"> / {discount.max_uses}</span>
-                          </div>
-                          {discount.used_count > 0 && (
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                              <div 
-                                className="bg-primary h-1.5 rounded-full" 
-                                style={{ width: `${(discount.used_count / discount.max_uses) * 100}%` }}
-                              />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div className="flex flex-col">
-                            <span>
-                              <Calendar className="inline-block h-3 w-3 mr-1" />
-                              {formatDate(discount.valid_from)}
-                            </span>
-                            <span>
-                              <Clock className="inline-block h-3 w-3 mr-1" />
-                              {formatDate(discount.valid_till)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col space-y-1">
-                            <Switch
-                              checked={discount.active}
-                              onCheckedChange={() => onToggle(discount.discount_code)}
-                              className="data-[state=checked]:bg-green-500"
-                            />
-                            <div className="flex space-x-1">
-                              {expired && (
-                                <Badge variant="destructive" className="text-xs">Expired</Badge>
-                              )}
-                              {discount.active ? (
-                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
-                                  Active
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300 text-xs">
-                                  Inactive
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Open menu</span>
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => onEdit(discount)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => onToggle(discount.discount_code)}
-                                className="flex items-center"
-                              >
-                                <Switch 
-                                  checked={discount.active}
-                                  className="mr-2 h-4 data-[state=checked]:bg-green-500"
-                                />
-                                {discount.active ? 'Deactivate' : 'Activate'}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                onClick={() => onDelete(discount.discount_code)}
-                                className="text-red-600 focus:text-red-600"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+              ))
+            )}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

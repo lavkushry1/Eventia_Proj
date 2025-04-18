@@ -1,24 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
+import { format } from 'date-fns';
+import { Calendar as CalendarIcon } from 'lucide-react';
+
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from '@/components/ui/command';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2 } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 interface Event {
   _id: string;
-  title: string;
-  date: string;
+  name: string;
 }
 
 interface Discount {
@@ -31,350 +63,400 @@ interface Discount {
   valid_till: string;
   max_uses: number;
   active: boolean;
-  used_count?: number;
 }
 
 interface DiscountFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (discount: any) => void;
-  discount?: any | null;
+  discount?: Discount;
   events: Event[];
-  isLoading: boolean;
+  onSubmit: (discount: Discount) => void;
+  onCancel: () => void;
+  isProcessing?: boolean;
 }
 
-const DiscountForm: React.FC<DiscountFormProps> = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  discount = null,
-  events = [],
-  isLoading
-}) => {
-  const isEditing = !!discount;
-  
-  // Format date string to datetime-local input format
-  const formatDateForInput = (dateStr: string): string => {
-    if (!dateStr) return '';
-    try {
-      const date = new Date(dateStr);
-      return date.toISOString().slice(0, 16);
-    } catch (e) {
-      return '';
-    }
-  };
+// Schema for form validation
+const formSchema = z.object({
+  discount_code: z.string().min(2, {
+    message: 'Discount code must be at least 2 characters.',
+  }).max(50),
+  discount_type: z.enum(['percentage', 'fixed']),
+  value: z.coerce.number().min(1, { 
+    message: 'Discount value must be greater than 0'
+  }).refine((val) => val <= 100, {
+    message: 'Percentage discount cannot exceed 100%',
+    path: ['value'],
+  }),
+  applicable_events: z.array(z.string()).optional().default([]),
+  valid_from: z.date(),
+  valid_till: z.date(),
+  max_uses: z.coerce.number().int().min(0),
+  active: z.boolean().default(true),
+}).refine(data => {
+  return data.valid_from <= data.valid_till;
+}, {
+  message: "End date must be after start date",
+  path: ["valid_till"],
+});
 
-  // Initialize form state
-  const [formData, setFormData] = useState<Partial<Discount>>({
-    discount_code: '',
-    discount_type: 'percentage',
-    value: 10,
-    applicable_events: [],
-    valid_from: formatDateForInput(new Date().toISOString()),
-    valid_till: formatDateForInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()),
-    max_uses: 100,
-    active: true
+const DiscountForm: React.FC<DiscountFormProps> = ({
+  discount,
+  events,
+  onSubmit,
+  onCancel,
+  isProcessing = false
+}) => {
+  const [openEventsPopover, setOpenEventsPopover] = useState(false);
+  const isEditing = !!discount?._id;
+
+  // Initialize form with default values or edit values
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: discount
+      ? {
+          ...discount,
+          valid_from: new Date(discount.valid_from),
+          valid_till: new Date(discount.valid_till),
+        }
+      : {
+          discount_code: '',
+          discount_type: 'percentage',
+          value: 10,
+          applicable_events: [],
+          valid_from: new Date(),
+          valid_till: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+          max_uses: 0,
+          active: true,
+        },
   });
 
-  // Set form data when editing an existing discount
-  useEffect(() => {
-    if (discount) {
-      setFormData({
-        ...discount,
-        valid_from: formatDateForInput(discount.valid_from),
-        valid_till: formatDateForInput(discount.valid_till)
-      });
-    }
-  }, [discount]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'number') {
-      setFormData({
-        ...formData,
-        [name]: parseFloat(value)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value
-      });
-    }
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData({
-      ...formData,
-      [name]: value
+  // Handle form submission
+  const handleSubmit = (values: z.infer<typeof formSchema>) => {
+    onSubmit({
+      _id: discount?._id,
+      discount_code: values.discount_code,
+      discount_type: values.discount_type,
+      value: values.value,
+      applicable_events: values.applicable_events,
+      max_uses: values.max_uses,
+      active: values.active,
+      valid_from: values.valid_from.toISOString(),
+      valid_till: values.valid_till.toISOString(),
     });
   };
 
-  const handleCheckboxChange = (name: string, checked: boolean) => {
-    setFormData({
-      ...formData,
-      [name]: checked
-    });
-  };
-
-  const handleEventSelection = (eventId: string, checked: boolean) => {
-    let updatedEvents = [...(formData.applicable_events || [])];
-    
-    if (checked) {
-      updatedEvents.push(eventId);
-    } else {
-      updatedEvents = updatedEvents.filter(id => id !== eventId);
-    }
-    
-    setFormData({
-      ...formData,
-      applicable_events: updatedEvents
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validation
-    if (!formData.discount_code || formData.discount_code.length !== 6) {
-      toast({
-        title: "Validation Error",
-        description: "Discount code must be exactly 6 characters",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (!formData.value || formData.value <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Discount value must be greater than 0",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (formData.discount_type === 'percentage' && formData.value > 100) {
-      toast({
-        title: "Validation Error",
-        description: "Percentage discount cannot exceed 100%",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    // Format dates for API
-    const formatDateForApi = (dateStr: string): string => {
-      try {
-        const date = new Date(dateStr);
-        return date.toISOString().replace('T', ' ').substring(0, 19);
-      } catch (e) {
-        return '';
-      }
-    };
-    
-    const submissionData = {
-      ...formData,
-      discount_code: formData.discount_code?.toUpperCase(),
-      valid_from: formatDateForApi(formData.valid_from || ''),
-      valid_till: formatDateForApi(formData.valid_till || '')
-    };
-    
-    onSubmit(submissionData);
-  };
-
+  // Get selected events data for display
+  const selectedEvents = form.watch('applicable_events') || [];
+  
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Discount' : 'Create New Discount'}</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="discount_code">Discount Code</Label>
-              <Input
-                id="discount_code"
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>{isEditing ? 'Edit Discount' : 'Create Discount'}</CardTitle>
+        <CardDescription>
+          {isEditing 
+            ? 'Update the discount details below'
+            : 'Fill in the details to create a new discount code'}
+        </CardDescription>
+      </CardHeader>
+      
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)}>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Discount Code */}
+              <FormField
+                control={form.control}
                 name="discount_code"
-                value={formData.discount_code || ''}
-                onChange={handleChange}
-                className="uppercase"
-                maxLength={6}
-                required
-                disabled={isEditing}
-                placeholder="e.g. IPL100"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Discount Code</FormLabel>
+                    <FormControl>
+                      <Input placeholder="SUMMER2023" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Customers will enter this code at checkout
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-              <p className="text-xs text-gray-500">6 characters, uppercase letters and numbers only</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Discount Type</Label>
-              <RadioGroup 
-                value={formData.discount_type}
-                onValueChange={(value) => handleSelectChange('discount_type', value)}
-                className="flex space-x-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="percentage" id="percentage" />
-                  <Label htmlFor="percentage">Percentage (%)</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="fixed" id="fixed" />
-                  <Label htmlFor="fixed">Fixed Amount (₹)</Label>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="value">
-                {formData.discount_type === 'percentage' ? 'Percentage Value (%)' : 'Fixed Amount (₹)'}
-              </Label>
-              <Input
-                id="value"
-                name="value"
-                type="number"
-                value={formData.value || ''}
-                onChange={handleChange}
-                min={0}
-                max={formData.discount_type === 'percentage' ? 100 : undefined}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="max_uses">Maximum Uses</Label>
-              <Input
-                id="max_uses"
+
+              {/* Max Uses */}
+              <FormField
+                control={form.control}
                 name="max_uses"
-                type="number"
-                value={formData.max_uses || ''}
-                onChange={handleChange}
-                min={1}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Maximum Uses</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="0" placeholder="0 for unlimited" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Set to 0 for unlimited uses
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="valid_from">Valid From</Label>
-              <Input
-                id="valid_from"
-                name="valid_from"
-                type="datetime-local"
-                value={formData.valid_from || ''}
-                onChange={handleChange}
-                required
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Discount Type */}
+              <FormField
+                control={form.control}
+                name="discount_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Discount Type</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select discount type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                        <SelectItem value="fixed">Fixed Amount (₹)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Percentage or fixed amount off
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="valid_till">Valid Till</Label>
-              <Input
-                id="valid_till"
-                name="valid_till"
-                type="datetime-local"
-                value={formData.valid_till || ''}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Applicable Events</Label>
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="select-all-events"
-                  checked={events.length > 0 && formData.applicable_events?.length === events.length}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setFormData({
-                        ...formData,
-                        applicable_events: events.map(e => e._id)
-                      });
-                    } else {
-                      setFormData({
-                        ...formData,
-                        applicable_events: []
-                      });
-                    }
-                  }}
-                />
-                <Label htmlFor="select-all-events" className="text-sm">Select All</Label>
-              </div>
-            </div>
-            
-            <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto">
-              {events.length === 0 ? (
-                <p className="text-gray-500 text-sm">No events available</p>
-              ) : (
-                <div className="space-y-2">
-                  {events.map(event => (
-                    <div key={event._id} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`event-${event._id}`}
-                        checked={formData.applicable_events?.includes(event._id)}
-                        onCheckedChange={(checked) => 
-                          handleEventSelection(event._id, checked === true)
-                        }
+
+              {/* Discount Value */}
+              <FormField
+                control={form.control}
+                name="value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Discount Value</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        max={form.watch('discount_type') === 'percentage' ? 100 : undefined}
+                        placeholder={form.watch('discount_type') === 'percentage' ? '10' : '100'} 
+                        {...field} 
                       />
-                      <Label htmlFor={`event-${event._id}`} className="text-sm">
-                        {event.title} ({new Date(event.date).toLocaleDateString()})
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </FormControl>
+                    <FormDescription>
+                      {form.watch('discount_type') === 'percentage' 
+                        ? 'Percentage off the total' 
+                        : 'Fixed amount off in rupees'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
-            <p className="text-xs text-gray-500">
-              Leave empty to apply to all events
-            </p>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Checkbox 
-              id="active"
-              checked={formData.active === true}
-              onCheckedChange={(checked) => 
-                handleCheckboxChange('active', checked === true)
-              }
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Valid From */}
+              <FormField
+                control={form.control}
+                name="valid_from"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Valid From</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date < new Date(new Date().setHours(0, 0, 0, 0))
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>
+                      When the discount becomes active
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Valid Till */}
+              <FormField
+                control={form.control}
+                name="valid_till"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Valid Till</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date < form.watch('valid_from')
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>
+                      When the discount expires
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Applicable Events */}
+            <FormField
+              control={form.control}
+              name="applicable_events"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Applicable Events</FormLabel>
+                  <Popover open={openEventsPopover} onOpenChange={setOpenEventsPopover}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value?.length && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value?.length
+                            ? `${field.value.length} event${field.value.length > 1 ? 's' : ''} selected`
+                            : "Select events (leave empty for all)"}
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search events..." />
+                        <CommandEmpty>No events found.</CommandEmpty>
+                        <CommandGroup className="max-h-64 overflow-auto">
+                          {events.map((event) => (
+                            <CommandItem
+                              value={event.name}
+                              key={event._id}
+                              onSelect={() => {
+                                const currentValues = [...(field.value || [])];
+                                const index = currentValues.indexOf(event._id);
+                                
+                                if (index === -1) {
+                                  field.onChange([...currentValues, event._id]);
+                                } else {
+                                  currentValues.splice(index, 1);
+                                  field.onChange(currentValues);
+                                }
+                              }}
+                            >
+                              <Checkbox
+                                checked={field.value?.includes(event._id)}
+                                className="mr-2"
+                              />
+                              {event.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>
+                    {selectedEvents.length 
+                      ? 'Discount will apply only to selected events' 
+                      : 'Leave empty to apply to all events'}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-            <Label htmlFor="active">Active</Label>
-          </div>
-          
-          {isEditing && (
-            <div className="text-sm text-gray-500">
-              <p>Used: {discount.used_count || 0} times</p>
-              <p>Created: {new Date(discount.created_at).toLocaleString()}</p>
-              {discount.updated_at && (
-                <p>Last Updated: {new Date(discount.updated_at).toLocaleString()}</p>
+
+            {/* Active Status */}
+            <FormField
+              control={form.control}
+              name="active"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Active Status</FormLabel>
+                    <FormDescription>
+                      Activate or deactivate this discount code
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
               )}
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            />
+          </CardContent>
+
+          <CardFooter className="flex justify-between">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onCancel}
+              disabled={isProcessing}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isEditing ? 'Updating...' : 'Creating...'}
-                </>
-              ) : (
-                isEditing ? 'Update Discount' : 'Create Discount'
-              )}
+            <Button 
+              type="submit"
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Processing...' : isEditing ? 'Update Discount' : 'Create Discount'}
             </Button>
-          </DialogFooter>
+          </CardFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </Form>
+    </Card>
   );
 };
 

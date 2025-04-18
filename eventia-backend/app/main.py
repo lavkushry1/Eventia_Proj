@@ -13,7 +13,7 @@ from .core.database import connect_to_mongo, close_mongo_connection, init_defaul
 from .middleware.security import SecurityHeadersMiddleware, RateLimiter
 
 # Import routers
-from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views
+from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views, discounts, admin_discounts
 
 # Create FastAPI app
 app = FastAPI(
@@ -141,8 +141,9 @@ app.include_router(events.router)
 app.include_router(bookings.router)
 app.include_router(settings_router.router)
 app.include_router(admin.router)  # No prefix as it already has its own prefix
-app.include_router(stadiums.router)
-app.include_router(stadium_views.router)
+app.include_router(discounts.router)
+app.include_router(bookings.router)
+app.include_router(admin_discounts.router)
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])
@@ -168,4 +169,4 @@ async def root():
         "message": "Welcome to Eventia Ticketing Platform API",
         "docs": "/api/docs",
         "version": "1.0.0"
-    } 
+    }

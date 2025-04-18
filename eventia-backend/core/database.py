@@ -2,7 +2,7 @@
 # @Author: Roni Laukkarinen
 # @Date:   2025-04-18 19:53:39
 # @Last Modified by:   Roni Laukkarinen
-# @Last Modified time: 2025-04-18 19:54:37
+# @Last Modified time: 2025-04-18 22:51:57
 """
 Database connection and management module.
 
@@ -55,6 +55,12 @@ def create_indexes() -> None:
         
         # Settings collection
         sync_db.settings.create_index([("type", pymongo.ASCENDING)], unique=True)
+        
+        # Discounts collection indexes
+        sync_db.discounts.create_index([("code", pymongo.ASCENDING)], unique=True)
+        sync_db.discounts.create_index([("is_active", pymongo.ASCENDING)])
+        sync_db.discounts.create_index([("event_id", pymongo.ASCENDING)])
+        sync_db.discounts.create_index([("start_date", pymongo.DESCENDING)])
         
         logger.info("MongoDB indexes created successfully")
     except Exception as e:

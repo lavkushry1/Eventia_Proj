@@ -1,0 +1,61 @@
+# Build stage
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+# Copy package.json and yarn.lock files
+COPY package.json yarn.lock ./
+
+# Install dependencies
+RUN yarn install --frozen-lockfile
+
+# Copy the rest of the application code
+COPY . .
+
+# Build the application
+RUN yarn build
+
+# Production stage with SSL support
+FROM nginx:stable-alpine
+
+# Install dependencies for acme.sh
+RUN apk add --no-cache curl socat openssl bash tzdata ca-certificates supervisor && \
+    mkdir -p /etc/supervisor/conf.d
+
+# Install acme.sh (a lightweight ACME client)
+ENV LE_CONFIG_HOME="/etc/acme.sh"
+RUN mkdir -p /etc/acme.sh && \
+    curl https://get.acme.sh | sh -s email=ssl@eventia.live && \
+    ln -s /root/.acme.sh/acme.sh /usr/local/bin/acme.sh
+
+# Set up directories for Nginx and certificates
+RUN mkdir -p /var/www/certbot && \
+    mkdir -p /etc/letsencrypt/live/eventia.live && \
+    mkdir -p /etc/nginx/ssl
+
+# Generate strong DH parameters for perfect forward secrecy
+RUN openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
+
+# Copy the built assets from the build stage
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Copy Nginx configuration
+COPY nginx/ssl.conf /etc/nginx/conf.d/default.conf
+
+# Create security.txt
+RUN mkdir -p /usr/share/nginx/html/.well-known
+RUN echo "Contact: mailto:security@eventia.live\nExpires: 2030-01-01T00:00:00.000Z\nEncryption: https://eventia.live/.well-known/pgp-key.txt\nPreferred-Languages: en\nCanonical: https://eventia.live/.well-known/security.txt\nPolicy: https://eventia.live/security-policy" > /usr/share/nginx/html/.well-known/security.txt
+
+# Copy SSL renewal scripts
+COPY scripts/renew-cert.sh /etc/periodic/daily/
+COPY scripts/check-cert.sh /etc/periodic/weekly/
+RUN chmod +x /etc/periodic/daily/renew-cert.sh /etc/periodic/weekly/check-cert.sh
+
+# Copy supervisor configuration
+COPY supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose ports
+EXPOSE 80 443
+
+# Start services with supervisord
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 

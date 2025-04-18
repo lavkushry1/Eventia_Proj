@@ -1,0 +1,26 @@
+# Security.txt for Eventia
+# Learn more about security.txt at https://securitytxt.org/
+
+# Contact information
+Contact: mailto:security@eventia.live
+Contact: https://eventia.live/security/report
+Contact: https://hackerone.com/eventia
+
+# Encryption key
+Encryption: https://eventia.live/.well-known/pgp-key.txt
+
+# Security policy
+Policy: https://eventia.live/security-policy
+
+# Preferred languages
+Preferred-Languages: en
+
+# Expiration
+Expires: 2025-12-31T23:59:59Z
+
+# Acknowledgments
+Acknowledgments: https://eventia.live/security/hall-of-fame
+
+# Canonical URL
+Canonical: https://eventia.live/.well-known/security.txt
+Canonical: https://api.eventia.live/.well-known/security.txt 

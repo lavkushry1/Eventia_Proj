@@ -2,8 +2,8 @@
 # @Author: Roni Laukkarinen
 # @Date:   2025-04-18 20:02:57
 # @Last Modified by:   Roni Laukkarinen
-# @Last Modified time: 2025-04-18 20:04:11
-"""
+# @Last Modified time: 2025-04-18 22:46:44
+E"""
 Discount data model and database operations.
 
 This module defines the Discount model, schemas, and database operations
@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field, validator
 import uuid
 from bson import ObjectId
 
-from ..core.database import db, serialize_object_id
-from ..core.config import logger
+from core.database import db, serialize_object_id
+from core.config import logger
 
 # ==================== Pydantic Models ====================
 

@@ -254,7 +254,7 @@ const DiscountAnalytics: React.FC<DiscountAnalyticsProps> = ({
                 {(analytics.expiring_soon || []).map((discount) => {
                   const daysRemaining = getDaysRemaining(discount.valid_till);
                   return (
-                    <Alert key={discount._id} variant="outline" className={
+                    <Alert key={discount._id} className={
                       daysRemaining <= 1 ? "border-red-200 bg-red-50" :
                       daysRemaining <= 3 ? "border-amber-200 bg-amber-50" :
                       "border-blue-200 bg-blue-50"
@@ -268,8 +268,7 @@ const DiscountAnalytics: React.FC<DiscountAnalyticsProps> = ({
                         <AlertTitle className="text-sm font-medium flex items-center justify-between">
                           <span className="font-mono">{discount.discount_code}</span>
                           <Badge variant={
-                            daysRemaining <= 1 ? "destructive" :
-                            daysRemaining <= 3 ? "outline" : "outline"
+                            daysRemaining <= 1 ? "destructive" : "outline"
                           } className={
                             daysRemaining <= 3 && daysRemaining > 1 ? "border-amber-300 bg-amber-100 text-amber-800" :
                             daysRemaining > 3 ? "border-blue-300 bg-blue-100 text-blue-800" : ""
