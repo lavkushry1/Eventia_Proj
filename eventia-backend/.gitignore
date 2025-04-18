@@ -1,0 +1,121 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+.virtualenv/
+.python-version
+
+# Environment variables
+.env
+.env.*
+!.env.example
+*.env.json
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+eggs/
+.eggs/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.coverage.*
+junit-*.xml
+test-results/
+
+# Logs
+*.log
+logs/
+flask_server.log
+
+# Database
+*.sqlite3
+*.db
+*.sql
+migrations/versions/
+mongodb_data/
+
+# Flask
+instance/
+.webassets-cache
+
+# Jupyter Notebook
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# SSL/TLS
+*.pem
+*.key
+*.crt
+*.cert
+*.csr
+certbot/
+.well-known/
+acme.sh/
+
+# Editor and OS files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.project
+.pydevproject
+
+# Docker
+.docker/
+docker-volume/
+
+# API documentation
+docs/_build/
+docs/site/
+
+# Static files collected
+/static/collected/
+media/uploaded/
+
+# Temporary files
+/tmp/
+/temp/
+
+# Code analysis
+.mypy_cache/
+.pytype/
+.dmypy.json
+dmypy.json
+.pyre/
+.scannerwork/
+
+# Performance profiling
+prof/
+*.prof
+*.lprof
+
+# Benchmarking
+benchmarks/results/ 
