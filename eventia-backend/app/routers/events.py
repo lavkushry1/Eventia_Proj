@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Roni Laukkarinen
+# @Date:   2025-04-18 19:39:13
+# @Last Modified by:   Roni Laukkarinen
+# @Last Modified time: 2025-04-18 23:59:44
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from datetime import datetime
@@ -17,17 +22,17 @@ async def get_events(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100)
-):
+) -> dict:
     """
     Get all events with optional filtering
-    
+
     Args:
         category: Filter by event category
         is_featured: Filter by featured flag
         status: Filter by event status
         skip: Number of records to skip
         limit: Maximum number of records to return
-        
+
     Returns:
         List of events and total count
     """
@@ -64,16 +69,16 @@ async def get_events(
         )
 
 @router.get("/{event_id}", response_model=EventResponse)
-async def get_event(event_id: str):
+async def get_event(event_id: str) -> dict:
     """
     Get a specific event by ID
-    
+
     Args:
         event_id: Event ID
-        
+
     Returns:
         Event data
-        
+
     Raises:
         HTTPException: If event not found
     """
@@ -108,17 +113,17 @@ async def get_event(event_id: str):
 async def create_event(
     event_data: EventCreate,
     current_user: dict = Depends(get_current_admin_user)
-):
+) -> dict:
     """
     Create a new event (admin only)
-    
+
     Args:
         event_data: New event data
         current_user: Current authenticated admin user
-        
+
     Returns:
         Created event data
-        
+
     Raises:
         HTTPException: If event creation fails
     """
@@ -167,18 +172,18 @@ async def update_event(
     event_id: str,
     event_updates: EventUpdate,
     current_user: dict = Depends(get_current_admin_user)
-):
+) -> dict:
     """
     Update an existing event (admin only)
-    
+
     Args:
         event_id: Event ID to update
         event_updates: Event fields to update
         current_user: Current authenticated admin user
-        
+
     Returns:
         Updated event data
-        
+
     Raises:
         HTTPException: If event not found or update fails
     """
@@ -234,17 +239,17 @@ async def update_event(
 async def delete_event(
     event_id: str,
     current_user: dict = Depends(get_current_admin_user)
-):
+) -> None:
     """
     Delete an event (admin only)
-    
+
     Args:
         event_id: Event ID to delete
         current_user: Current authenticated admin user
-        
+
     Returns:
-        204 No Content
-        
+        None
+
     Raises:
         HTTPException: If event not found or deletion fails
     """
@@ -256,7 +261,7 @@ async def delete_event(
             logger.warning(f"Event not found for deletion: {event_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Event not found"
+                detail=f"Event with ID {event_id} not found"
             )
         
         # Check if event has bookings
@@ -266,27 +271,50 @@ async def delete_event(
             logger.warning(f"Cannot delete event {event_id} with {booking_count} bookings")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete event with existing bookings"
+                detail=f"Cannot delete event that has {booking_count} existing bookings. Cancel all bookings first."
             )
+        
+        # Check for and delete related event images
+        try:
+            # Use a separate try block to handle image deletion errors
+            image_path = event.get("image_url", "")
+            if image_path and not image_path.startswith("http"):
+                # This would be where you'd delete the image file
+                # Implementation depends on how files are stored
+                logger.info(f"Would delete image at path: {image_path}")
+                # Future implementation: delete_file(image_path)
+        except Exception as img_err:
+            # Log but don't fail if image deletion fails
+            logger.error(f"Error deleting event image for {event_id}: {str(img_err)}")
         
         # Delete event
         result = await db.events.delete_one({"id": event_id})
         
-        if not result.acknowledged or result.deleted_count == 0:
+        if not result.acknowledged:
+            logger.error(f"Database didn't acknowledge delete operation for event {event_id}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete event"
+                detail="Database error: Failed to delete event"
+            )
+            
+        if result.deleted_count == 0:
+            logger.error(f"Event {event_id} not deleted despite existing in previous check")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database inconsistency: Event not deleted"
             )
         
-        logger.info(f"Event deleted: {event_id}")
+        logger.info(f"Event deleted successfully: {event_id}")
         
         return
     
     except HTTPException:
+        # Re-raise HTTP exceptions without modification
         raise
     except Exception as e:
-        logger.error(f"Error deleting event {event_id}: {str(e)}")
+        # Log unexpected errors with traceback
+        logger.error(f"Unexpected error deleting event {event_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while deleting the event"
-        ) 
+            detail="An internal server error occurred while deleting the event"
+        )

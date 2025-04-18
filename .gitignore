@@ -1,33 +1,198 @@
-# Environment variables
+# Environment variables and secrets
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env*.local
+*.env.json
+.gcp-keyfile.json
+google-credentials.json
+*-service-account.json
 
-# Docker volumes
+# SSL/TLS certificates and keys
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
 certbot/
+.well-known/
 
-# Logs
-*.log
+# Docker volumes and artifacts
+docker-compose.override.yml
+.docker/
+docker-volume/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.eclipse
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
+*~
+thumbs.db
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.coverage.*
+*.cover
+*.py,cover
+.python-version
+venv/
+env/
+ENV/
+.venv/
+.eggs/
+*.egg-info/
+dist-python/
+build-python/
+develop-eggs/
+downloads/
+eggs/
+.installed.cfg
+*.egg
+
+# JavaScript/TypeScript artifacts
+node_modules/
+jspm_packages/
+bower_components/
+coverage/
+.nyc_output/
+dist/
+dist-ssr/
+*.local
+build/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.gatsby/
+.svelte-kit/
+.output/
+storybook-static/
+.turbo
+.eslintcache
+.stylelintcache
+.rollup.cache/
+
+# Logs and debugging
 logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.*.json
+.rpt2_cache/
+.rts2_cache*/
+*.lcov
+*.tsbuildinfo
+debug.log
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+yarn.lock.cache
 flask_server.log
 
-# OS files
-.DS_Store
+# Testing artifacts
+cypress/videos/
+cypress/screenshots/
+playwright/videos/
+playwright/screenshots/
+/coverage
+/.nyc_output
+/test-results/
+/playwright-report/
+junit.xml
+test-report.xml
 
-# IDE files
-.idea/
-.vscode/
+# Build artifacts and bundles
+.webpack/
+.serverless/
+.fusebox/
+out/
+.angular/
+.sass-cache/
+connect.lock
+libpeerconnection.log
+testem.log
+bundle-stats.json
+stats.json
+npm-shrinkwrap.json
 
-# Deployment
-docker-compose.override.yml
+# Database artifacts
+*.sqlite3
+*.db
+*.rdb
+dump.rdb
+.dynamodb/
+*-dump.sql
+*.bak
+mongodump/
 
-# Python virtual environment
-venv/
-__pycache__/
-*.pyc
+# Generated files
+/generated/
+*.generated.*
+auto-imports.d.ts
+components.d.ts
 
-# Docker
-.docker/
-docker-compose.override.yml 
+# Temporary files
+/tmp/
+/temp/
+.temp/
+.tmp/
+.docusaurus
+
+# Performance and profiling
+.clinic/
+flame.0x
+*.heapsnapshot
+*.cpuprofile
+trace.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Benchmarking
+benchmarking-results/
+perflogs/
+lighthouse-reports/
+
+# SSL test results
+ssl-test-reports/
+acme.sh/
+
+# Terraform 
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+
+# Dependency analysis
+dependency-report/
+component-analysis/
+bundle-analysis/
+madge-output/ 

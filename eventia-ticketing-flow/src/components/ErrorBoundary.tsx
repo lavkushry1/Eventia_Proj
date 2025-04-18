@@ -3,6 +3,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
@@ -34,16 +35,28 @@ class ErrorBoundary extends Component<Props, State> {
     // Log the error to console
     console.error('🚨 React Error Boundary caught an error:', error, errorInfo);
     
-    // You can also log to a monitoring service like Sentry
-    if (window.location.hostname !== 'localhost') {
-      // Only log in production to avoid noise in development
-      // If using Sentry: Sentry.captureException(error);
-      
-      // Log with correlation ID from API if available
-      const correlationId = sessionStorage.getItem('x-correlation-id');
-      if (correlationId) {
-        console.error('Error correlation ID:', correlationId);
-      }
+    // Call optional onError callback for external error reporting
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
+    }
+    
+    // Log with correlation ID from API if available
+    const correlationId = sessionStorage.getItem('x-correlation-id');
+    if (correlationId) {
+      console.error('Error correlation ID:', correlationId);
+    }
+    
+    // Log additional context if available
+    try {
+      const path = window.location.pathname;
+      const state = (window as any).__REDUX_STATE__;
+      console.error('Error context:', {
+        path,
+        state: state ? 'Available' : 'Not available',
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      // Ignore errors in error reporting
     }
     
     this.setState({
@@ -51,6 +64,14 @@ class ErrorBoundary extends Component<Props, State> {
       errorInfo
     });
   }
+
+  resetError = () => {
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null
+    });
+  };
 
   render(): ReactNode {
     if (this.state.hasError) {
@@ -63,7 +84,7 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-boundary">
           <div className="error-container">
-            <h1>Something went wrong.</h1>
+            <h1>Something went wrong</h1>
             <div className="error-details">
               {this.state.error && (
                 <div className="error-message">
@@ -78,14 +99,21 @@ class ErrorBoundary extends Component<Props, State> {
                 </div>
               )}
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="reset-button"
-            >
-              Reload Page
-            </button>
+            <div className="error-actions">
+              <button
+                onClick={this.resetError}
+                className="reset-button mr-2"
+              >
+                Try Again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="reset-button"
+              >
+                Reload Page
+              </button>
+            </div>
           </div>
-          
           <style jsx>{`
             .error-boundary {
               display: flex;
@@ -128,6 +156,12 @@ class ErrorBoundary extends Component<Props, State> {
               font-size: 0.875rem;
             }
             
+            .error-actions {
+              display: flex;
+              justify-content: center;
+              gap: 1rem;
+            }
+            
             .reset-button {
               background-color: #0d6efd;
               border: none;
@@ -150,4 +184,4 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-export default ErrorBoundary; 
+export default ErrorBoundary;

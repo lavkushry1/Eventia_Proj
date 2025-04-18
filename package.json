@@ -9,5 +9,9 @@
   "dependencies": {
     "@babel/plugin-transform-react-jsx": "^7.25.9",
     "framer-motion": "^12.7.4"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "^16.10.1",
+    "madge": "^8.0.0"
   }
 }

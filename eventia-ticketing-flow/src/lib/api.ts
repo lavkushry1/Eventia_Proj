@@ -195,15 +195,60 @@ api.interceptors.response.use(
       console.error('API Response Error:', {
         status: error.response.status,
         data: error.response.data,
+        url: error.config?.url,
+        method: error.config?.method,
         correlationId: error.config?.headers?.['X-Correlation-ID'],
       });
+      
+      // Store correlation ID for error tracking
+      if (error.config?.headers?.['X-Correlation-ID']) {
+        sessionStorage.setItem('x-correlation-id', error.config.headers['X-Correlation-ID']);
+      }
+      
+      // Handle 401 unauthorized globally
+      if (error.response.status === 401 && !error.config.url.includes('/admin/login')) {
+        console.warn('User session expired or unauthorized');
+        // Clear auth tokens if not already in login page
+        if (!window.location.pathname.includes('/admin-login')) {
+          localStorage.removeItem('token');
+          delete api.defaults.headers.common['Authorization'];
+          
+          // Redirect to login with return URL
+          window.location.href = `/admin-login?returnUrl=${encodeURIComponent(window.location.pathname)}`;
+          
+          // Show message
+          const toast = window.toast;
+          if (typeof toast === 'function') {
+            toast({
+              title: "Session Expired",
+              description: "Your session has expired. Please login again.",
+              variant: "destructive"
+            });
+          }
+        }
+      }
+      
+      // Transform error to more user-friendly format
+      if (error.response.data?.detail) {
+        error.message = error.response.data.detail;
+      }
     } else if (error.request) {
       console.error('API Request Error: No response received', {
         request: error.request,
+        url: error.config?.url,
+        method: error.config?.method,
         correlationId: error.config?.headers?.['X-Correlation-ID'],
       });
+      
+      // Check if network error
+      if (!navigator.onLine) {
+        error.message = "Your internet connection appears to be offline. Please check your network.";
+      } else {
+        error.message = "The server is not responding. Please try again later.";
+      }
     } else {
       console.error('API Error:', error.message);
+      error.message = "An unexpected error occurred while communicating with the server.";
     }
     
     return Promise.reject(error);
