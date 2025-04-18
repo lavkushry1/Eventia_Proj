@@ -21,7 +21,7 @@ interface BackendConfig {
 
 // Default configuration
 const defaultConfig: IConfig = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004/api',
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003',
   FRONTEND_URL: import.meta.env.VITE_FRONTEND_URL || 'http://localhost:3000',
   PAYMENT_ENABLED: import.meta.env.VITE_PAYMENT_ENABLED === 'true',
   MERCHANT_NAME: import.meta.env.VITE_MERCHANT_NAME || 'Eventia Ticketing',

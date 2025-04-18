@@ -137,9 +137,10 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="stadium-booking-description">
         <DialogHeader>
           <DialogTitle className="text-xl">Book Tickets for {eventTitle}</DialogTitle>
+          <p id="stadium-booking-description" className="sr-only">Select a stadium, choose your seats, and proceed to checkout</p>
         </DialogHeader>
         
         <Tabs defaultValue="stadium" value={selectedTab} onValueChange={setSelectedTab}>

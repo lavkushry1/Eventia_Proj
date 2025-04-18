@@ -74,7 +74,7 @@ const StadiumSelector: React.FC<StadiumSelectorProps> = ({ eventId, onSelect }) 
     const fetchStadiums = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/stadiums?active_only=true');
+        const response = await api.get('/stadiums?active_only=true');
         setStadiums(response.data.stadiums);
         // Pre-select the first stadium if available
         if (response.data.stadiums.length > 0) {

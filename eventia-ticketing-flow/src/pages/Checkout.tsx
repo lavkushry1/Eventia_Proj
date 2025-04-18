@@ -411,28 +411,32 @@ const Checkout = () => {
             
             {paymentSettings.paymentMode === 'qr_image' && paymentSettings.qrImageUrl && !paymentSettings.qrImageUrl.includes('placeholder') ? (
               // Show the custom QR image uploaded by admin
-              <div className="w-64 h-64 relative mb-4">
+              <div className="w-40 sm:w-56 md:w-64 relative mb-4">
                 <img 
                   src={paymentSettings.qrImageUrl.startsWith('http') 
                     ? paymentSettings.qrImageUrl 
                     : `${config().API_BASE_URL.replace('/api', '')}${paymentSettings.qrImageUrl}`} 
                   alt="Payment QR Code" 
-                  className="w-full h-full object-contain"
+                  className="w-full h-auto object-contain"
                 />
               </div>
             ) : (
               // Generate dynamic QR code for the VPA
-              <QRCodeSVG 
-                value={generateUpiQrData()}
-                size={256}
-                level="H"
-                className="mb-4"
-              />
+              <div className="w-40 sm:w-56 md:w-64 mb-4">
+                <QRCodeSVG 
+                  value={generateUpiQrData()}
+                  size={200}
+                  level="H"
+                  className="w-full h-auto"
+                />
+              </div>
             )}
             
             <div className="text-center mt-2">
-              <p className="text-sm font-medium">Pay to: {paymentSettings.merchantName}</p>
-              <p className="text-sm text-gray-600">UPI ID: {paymentSettings.vpaAddress}</p>
+              <p className="text-sm font-medium">Use your UPI app to scan this QR code</p>
+              <p className="text-xs text-gray-500">
+                You can also take a screenshot of this QR code and upload it in your UPI app to complete payment.
+              </p>
             </div>
           </div>
           

@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, UploadFile, File
 from typing import List, Optional
 import uuid
 from datetime import datetime
+from pathlib import Path
+import shutil
+from fastapi.responses import JSONResponse
 
 from app.schemas.stadium import Stadium, StadiumCreate, StadiumUpdate, StadiumList, StadiumSection
 from app.core.database import get_database
@@ -151,4 +154,100 @@ async def get_stadium_sections(
                 return event["stadium_pricing"][stadium_id]
         
         # Otherwise return the default stadium sections
-        return stadium["sections"] 
+        return stadium["sections"]
+
+# Upload stadium image (admin only)
+@router.post("/{stadium_id}/image", status_code=201)
+async def upload_stadium_image(
+    stadium_id: str = Path(..., description="The ID of the stadium"),
+    file: UploadFile = File(...),
+    admin = Depends(admin_required)
+):
+    """Upload stadium image (admin only)."""
+    # Check if stadium exists
+    async with get_database() as db:
+        stadium = await db.stadiums.find_one({"stadium_id": stadium_id})
+        if not stadium:
+            raise HTTPException(status_code=404, detail="Stadium not found")
+    
+    # Check file extension
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+    file_extension = file.filename.split('.')[-1].lower()
+    if file_extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File format not allowed. Use: {', '.join(allowed_extensions)}"
+        )
+    
+    # Create directory if it doesn't exist
+    upload_dir = Path(__file__).parent.parent / "static" / "stadiums"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate safe filename
+    new_filename = f"{stadium_id}.{file_extension}"
+    file_path = upload_dir / new_filename
+    
+    # Save the file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update stadium in database with new image URL
+    image_url = f"/static/stadiums/{new_filename}"
+    async with get_database() as db:
+        await db.stadiums.update_one(
+            {"stadium_id": stadium_id},
+            {"$set": {"image_url": image_url, "updated_at": datetime.now()}}
+        )
+    
+    return JSONResponse(content={
+        "message": "Stadium image uploaded successfully",
+        "image_url": image_url
+    })
+
+# Upload AR model for stadium (admin only)
+@router.post("/{stadium_id}/ar-model", status_code=201)
+async def upload_stadium_ar_model(
+    stadium_id: str = Path(..., description="The ID of the stadium"),
+    file: UploadFile = File(...),
+    admin = Depends(admin_required)
+):
+    """Upload AR model for stadium (admin only)."""
+    # Check if stadium exists
+    async with get_database() as db:
+        stadium = await db.stadiums.find_one({"stadium_id": stadium_id})
+        if not stadium:
+            raise HTTPException(status_code=404, detail="Stadium not found")
+    
+    # Check file extension
+    allowed_extensions = {'glb', 'gltf'}
+    file_extension = file.filename.split('.')[-1].lower()
+    if file_extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File format not allowed. Use: {', '.join(allowed_extensions)}"
+        )
+    
+    # Create directory if it doesn't exist
+    upload_dir = Path(__file__).parent.parent / "static" / "models"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate safe filename
+    new_filename = f"{stadium_id}.{file_extension}"
+    file_path = upload_dir / new_filename
+    
+    # Save the file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update stadium in database with new AR model URL
+    ar_model_url = f"/static/models/{new_filename}"
+    async with get_database() as db:
+        await db.stadiums.update_one(
+            {"stadium_id": stadium_id},
+            {"$set": {"ar_model_url": ar_model_url, "updated_at": datetime.now()}}
+        )
+    
+    return JSONResponse(content={
+        "message": "Stadium AR model uploaded successfully",
+        "ar_model_url": ar_model_url
+    }) 
