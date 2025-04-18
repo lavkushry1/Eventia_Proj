@@ -1,256 +1,137 @@
-"""
-Payment Model
-------------
-This module defines the Payment model and its operations.
-"""
-
 from datetime import datetime
-import logging
-import os
-from bson import ObjectId
-from app.db.mongodb import get_collection
-from werkzeug.utils import secure_filename
+from enum import Enum
+from typing import List, Optional
 
-logger = logging.getLogger("eventia.models.payment")
+from pydantic import BaseModel, Field, validator
 
-class Payment:
-    """
-    Payment model representing payment settings and operations.
-    """
+
+class PaymentMethod(str, Enum):
+    """Payment method enum"""
+    UPI = "upi"
+    CREDIT_CARD = "credit_card"
+    DEBIT_CARD = "debit_card"
+    NET_BANKING = "net_banking"
+    WALLET = "wallet"
+
+
+class PaymentGateway(str, Enum):
+    """Payment gateway enum"""
+    RAZORPAY = "razorpay"
+    PAYTM = "paytm"
+    STRIPE = "stripe"
+    DIRECT_UPI = "direct_upi"
+    PHONEPE = "phonepe"
+    GPAY = "gpay"
+
+
+class UpiSettings(BaseModel):
+    """UPI payment settings model"""
+    merchant_name: str = Field(..., description="Name of the merchant for UPI")
+    vpa: str = Field(..., description="Virtual Payment Address (UPI ID)")
+    description: Optional[str] = Field(None, description="Description to show in UPI payment apps")
+    qr_code_url: Optional[str] = Field(None, description="URL to QR code image")
     
-    settings_collection = 'settings'
+    @validator('vpa')
+    def validate_vpa(cls, v):
+        if not v or "@" not in v:
+            raise ValueError("VPA must be a valid UPI ID (e.g., username@upi)")
+        return v
+
+
+class GatewaySettings(BaseModel):
+    """Payment gateway settings model"""
+    gateway: PaymentGateway
+    merchant_id: str
+    api_key: str
+    api_secret: Optional[str] = None
+    is_test_mode: bool = True
+    webhook_url: Optional[str] = None
+    additional_config: Optional[dict] = None
+
+
+class PaymentSettingsBase(BaseModel):
+    """Base payment settings model with common fields"""
+    active_methods: List[PaymentMethod] = Field([PaymentMethod.UPI], description="List of active payment methods")
+    default_method: PaymentMethod = Field(PaymentMethod.UPI, description="Default payment method")
+    default_currency: str = Field("INR", description="Default currency")
+    upi_settings: Optional[UpiSettings] = None
+    gateway_settings: Optional[List[GatewaySettings]] = None
+
+
+class PaymentSettingsCreate(PaymentSettingsBase):
+    """Payment settings create model"""
+    pass
+
+
+class PaymentSettingsInDB(PaymentSettingsBase):
+    """Payment settings model as stored in the database"""
+    settings_id: str = Field(..., description="Unique settings identifier")
+    created_at: datetime = Field(default_factory=datetime.now, description="When the settings were created")
+    updated_at: Optional[datetime] = Field(None, description="When the settings were last updated")
+    updated_by: Optional[str] = Field(None, description="User ID who last updated the settings")
     
-    @classmethod
-    def get_payment_settings(cls):
-        """
-        Get payment settings.
-        
-        Returns:
-            dict: Payment settings
-        """
-        settings_collection = get_collection(cls.settings_collection)
-        
-        # Get UPI settings from database
-        settings = settings_collection.find_one({"type": "upi_settings"})
-        
-        if not settings:
-            # Create default settings if none exist
-            default_settings = {
-                "type": "upi_settings",
-                "merchant_name": "Eventia Tickets",
-                "vpa": "eventia@upi",
-                "description": "Official payment account for Eventia ticket purchases",
-                "payment_mode": "vpa",
-                "qrImageUrl": None,
-                "updated_at": datetime.now()
+    class Config:
+        schema_extra = {
+            "example": {
+                "settings_id": "ps_12345",
+                "active_methods": ["upi", "credit_card", "debit_card"],
+                "default_method": "upi",
+                "default_currency": "INR",
+                "upi_settings": {
+                    "merchant_name": "Eventia Ticketing",
+                    "vpa": "eventia@icici",
+                    "description": "Payment for event tickets",
+                    "qr_code_url": "https://example.com/upi-qr.png"
+                },
+                "gateway_settings": [
+                    {
+                        "gateway": "razorpay",
+                        "merchant_id": "rzp_merchant_123",
+                        "api_key": "rzp_key_123456",
+                        "api_secret": "rzp_secret_123456",
+                        "is_test_mode": True,
+                        "webhook_url": "https://api.eventia.com/webhooks/razorpay"
+                    }
+                ],
+                "created_at": "2023-01-01T10:00:00",
+                "updated_at": "2023-02-01T15:30:00",
+                "updated_by": "usr_admin123"
             }
-            settings_collection.insert_one(default_settings)
-            settings = default_settings
-            logger.info("Created default payment settings")
-        
-        return cls.format_payment_settings(settings)
-    
-    @classmethod
-    def update_payment_settings(cls, settings_data):
-        """
-        Update payment settings.
-        
-        Args:
-            settings_data (dict): New payment settings
-            
-        Returns:
-            dict: Updated payment settings
-        """
-        settings_collection = get_collection(cls.settings_collection)
-        
-        # Get existing settings
-        existing_settings = settings_collection.find_one({"type": "upi_settings"}) or {}
-        
-        # Update settings
-        update_data = {
-            "merchant_name": settings_data.get("merchant_name", existing_settings.get("merchant_name", "Eventia Tickets")),
-            "vpa": settings_data.get("vpa", existing_settings.get("vpa", "eventia@upi")),
-            "description": settings_data.get("description", existing_settings.get("description", "")),
-            "payment_mode": settings_data.get("payment_mode", existing_settings.get("payment_mode", "vpa")),
-            "updated_at": datetime.now()
         }
-        
-        # Update or insert settings
-        if existing_settings:
-            settings_collection.update_one(
-                {"type": "upi_settings"},
-                {"$set": update_data}
-            )
-        else:
-            update_data["type"] = "upi_settings"
-            settings_collection.insert_one(update_data)
-        
-        # Fetch updated settings
-        updated_settings = settings_collection.find_one({"type": "upi_settings"})
-        return cls.format_payment_settings(updated_settings)
+
+
+class PaymentSettingsResponse(PaymentSettingsBase):
+    """Payment settings response model"""
+    settings_id: str
+    created_at: datetime
+    updated_at: Optional[datetime]
     
-    @classmethod
-    def update_payment_settings_with_image(cls, merchant_name, vpa, description, payment_mode, qr_image=None):
-        """
-        Update payment settings with QR image.
-        
-        Args:
-            merchant_name (str): Merchant name
-            vpa (str): Virtual Payment Address
-            description (str): Payment description
-            payment_mode (str): Payment mode
-            qr_image (FileStorage, optional): QR image file
-            
-        Returns:
-            dict: Updated payment settings
-        """
-        settings_collection = get_collection(cls.settings_collection)
-        
-        # Prepare settings document
-        update_data = {
-            "merchant_name": merchant_name,
-            "vpa": vpa,
-            "description": description,
-            "payment_mode": payment_mode,
-            "updated_at": datetime.now()
-        }
-        
-        # Handle QR image upload if provided
-        if qr_image and qr_image.filename:
-            logger.info(f"Processing QR image upload: {qr_image.filename}")
-            
-            # Generate unique filename
-            filename = f"payment_qr_{datetime.now().strftime('%Y%m%d%H%M%S')}{os.path.splitext(qr_image.filename)[1]}"
-            file_path = os.path.join("static/uploads", secure_filename(filename))
-            
-            # Create uploads directory if it doesn't exist
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Save file
-            qr_image.save(file_path)
-            logger.info(f"Saved QR image to {file_path}")
-            
-            # Set QR image URL
-            relative_path = f"/static/uploads/{secure_filename(filename)}"
-            update_data["qrImageUrl"] = relative_path
-            logger.info(f"Set qrImageUrl to {relative_path}")
-        
-        # Update settings in database
-        settings_collection.update_one(
-            {"type": "upi_settings"},
-            {"$set": update_data},
-            upsert=True
-        )
-        
-        # Fetch updated settings
-        updated_settings = settings_collection.find_one({"type": "upi_settings"})
-        return cls.format_payment_settings(updated_settings)
+    # Exclude sensitive data in response
+    class Config:
+        @staticmethod
+        def schema_extra(schema, model):
+            for prop in schema.get('properties', {}).values():
+                if 'secret' in prop.get('title', '').lower() or 'key' in prop.get('title', '').lower():
+                    prop['writeOnly'] = True
+
+
+class PaymentSettingsUpdate(BaseModel):
+    """Payment settings update model with all fields optional"""
+    active_methods: Optional[List[PaymentMethod]] = None
+    default_method: Optional[PaymentMethod] = None
+    default_currency: Optional[str] = None
+    upi_settings: Optional[UpiSettings] = None
+    gateway_settings: Optional[List[GatewaySettings]] = None
+
+
+class UpiUpdateRequest(BaseModel):
+    """UPI settings update request model"""
+    merchant_name: str = Field(..., description="Name of the merchant for UPI")
+    vpa: str = Field(..., description="Virtual Payment Address (UPI ID)")
+    description: Optional[str] = Field(None, description="Description to show in UPI payment apps")
     
-    @classmethod
-    def get_payment_metrics(cls):
-        """
-        Get payment metrics for admin dashboard.
-        
-        Returns:
-            dict: Payment metrics
-        """
-        bookings_collection = get_collection('bookings')
-        
-        # Get payment metrics
-        total_bookings = bookings_collection.count_documents({})
-        confirmed_payments = bookings_collection.count_documents({"status": "confirmed"})
-        pending_payments = bookings_collection.count_documents({"status": "pending"})
-        expired_payments = bookings_collection.count_documents({"status": "expired"})
-        
-        # Calculate conversion rate
-        conversion_rate = (confirmed_payments / total_bookings * 100) if total_bookings > 0 else 0
-        
-        # Calculate average time to payment
-        pipeline = [
-            {"$match": {"status": "confirmed", "payment_verified_at": {"$exists": True}}},
-            {"$project": {
-                "payment_time": {
-                    "$divide": [
-                        {"$subtract": ["$payment_verified_at", "$created_at"]},
-                        1000 * 60  # Convert to minutes
-                    ]
-                }
-            }},
-            {"$group": {
-                "_id": None,
-                "avg_payment_time": {"$avg": "$payment_time"}
-            }}
-        ]
-        
-        avg_payment_result = list(bookings_collection.aggregate(pipeline))
-        avg_payment_time = avg_payment_result[0]["avg_payment_time"] if avg_payment_result else 0
-        
-        # Get recent payments
-        recent_payments = list(bookings_collection.find({"status": "confirmed"})
-                           .sort("payment_verified_at", -1)
-                           .limit(5))
-        
-        formatted_recent_payments = []
-        for payment in recent_payments:
-            # Format the payment
-            payment_copy = payment.copy()
-            
-            # Convert MongoDB _id to string
-            if '_id' in payment_copy:
-                payment_copy['id'] = str(payment_copy.pop('_id'))
-            
-            # Format dates
-            for date_field in ['created_at', 'updated_at', 'payment_verified_at']:
-                if date_field in payment_copy and isinstance(payment_copy[date_field], datetime):
-                    payment_copy[date_field] = payment_copy[date_field].isoformat()
-                    
-            formatted_recent_payments.append(payment_copy)
-        
-        return {
-            "total_bookings": total_bookings,
-            "confirmed_payments": confirmed_payments,
-            "pending_payments": pending_payments,
-            "expired_payments": expired_payments,
-            "conversion_rate": round(conversion_rate, 2),
-            "avg_payment_time_minutes": round(avg_payment_time, 2) if avg_payment_time else 0,
-            "recent_payments": formatted_recent_payments,
-        }
-    
-    @classmethod
-    def format_payment_settings(cls, settings):
-        """
-        Format payment settings for API response.
-        
-        Args:
-            settings (dict): Payment settings from database
-            
-        Returns:
-            dict: Formatted payment settings
-        """
-        if not settings:
-            return None
-        
-        # Create a copy to avoid modifying the original
-        formatted_settings = settings.copy()
-        
-        # Remove MongoDB ID from response
-        if "_id" in formatted_settings:
-            formatted_settings.pop("_id")
-        
-        # Format date
-        if "updated_at" in formatted_settings and isinstance(formatted_settings["updated_at"], datetime):
-            formatted_settings["updated_at"] = formatted_settings["updated_at"].isoformat()
-        
-        # Format the response to match the frontend expectations
-        result = {
-            "isPaymentEnabled": True,
-            "merchant_name": formatted_settings.get("merchant_name", "Eventia Tickets"),
-            "vpa": formatted_settings.get("vpa", "eventia@upi"),
-            "vpaAddress": formatted_settings.get("vpa", "eventia@upi"),  # For frontend compatibility
-            "description": formatted_settings.get("description", ""),
-            "payment_mode": formatted_settings.get("payment_mode", "vpa"),
-            "qrImageUrl": formatted_settings.get("qrImageUrl", None),
-            "updated_at": formatted_settings.get("updated_at", datetime.now().isoformat())
-        }
-        
-        return result 
+    @validator('vpa')
+    def validate_vpa(cls, v):
+        if not v or "@" not in v:
+            raise ValueError("VPA must be a valid UPI ID (e.g., username@upi)")
+        return v 

@@ -1,21 +1,7 @@
 """
-Database Package Initialization
-------------------------------
-This package contains all database-related modules.
+Database package for MongoDB connection and operations.
 """
 
-from app.db.mongodb import (
-    connect_to_mongo,
-    close_mongo_connection,
-    get_database,
-    get_collection,
-    init_db
-)
+from app.db.mongodb import connect_to_mongo, close_mongo_connection, get_database
 
-__all__ = [
-    'connect_to_mongo',
-    'close_mongo_connection',
-    'get_database',
-    'get_collection',
-    'init_db'
-] 
+__all__ = ["connect_to_mongo", "close_mongo_connection", "get_database"] 

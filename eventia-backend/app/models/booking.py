@@ -1,320 +1,223 @@
-"""
-Booking Model
-------------
-This module defines the Booking model and its operations.
-"""
+from datetime import datetime
+from enum import Enum
+from typing import Dict, List, Optional
 
-from datetime import datetime, timedelta
-import re
-import hashlib
-import logging
-from bson import ObjectId
-from app.db.mongodb import get_collection
-from app.models.event import Event
+from pydantic import BaseModel, EmailStr, Field, validator
 
-logger = logging.getLogger("eventia.models.booking")
 
-class Booking:
-    """
-    Booking model representing a ticket booking.
-    """
+class PaymentStatus(str, Enum):
+    """Payment status enum"""
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class BookingStatus(str, Enum):
+    """Booking status enum"""
+    CONFIRMED = "confirmed"
+    PENDING = "pending"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class CustomerInfo(BaseModel):
+    """Customer information model"""
+    name: str = Field(..., description="Full name of the customer")
+    email: EmailStr = Field(..., description="Email address of the customer")
+    phone: str = Field(..., description="Phone number of the customer")
     
-    collection = 'bookings'
+    @validator('phone')
+    def validate_phone(cls, v):
+        # Simple phone validation - can be extended based on requirements
+        if not v or len(v) < 10:
+            raise ValueError("Phone number must be at least 10 digits")
+        return v
+
+
+class TicketItem(BaseModel):
+    """Ticket item model for booking"""
+    ticket_type_id: str = Field(..., description="ID of the ticket type")
+    ticket_type_name: str = Field(..., description="Name of the ticket type")
+    quantity: int = Field(..., description="Number of tickets")
+    unit_price: float = Field(..., description="Price per ticket")
     
-    @classmethod
-    def find_all(cls, limit=50, skip=0, status=None):
-        """
-        Find all bookings, optionally filtered by status.
-        
-        Args:
-            limit (int, optional): Maximum number of bookings to return
-            skip (int, optional): Number of bookings to skip (for pagination)
-            status (str, optional): Filter by booking status
-            
-        Returns:
-            list: List of bookings matching the criteria
-        """
-        query = {}
-        if status:
-            query["status"] = status
-            
-        bookings_collection = get_collection(cls.collection)
-        bookings_cursor = bookings_collection.find(query).sort("created_at", -1).limit(limit).skip(skip)
-        
-        return list(bookings_cursor)
+    @validator('quantity')
+    def validate_quantity(cls, v):
+        if v <= 0:
+            raise ValueError("Quantity must be greater than 0")
+        return v
     
-    @classmethod
-    def find_by_id(cls, booking_id):
-        """
-        Find a booking by its ID.
-        
-        Args:
-            booking_id (str): ID of the booking to find
-            
-        Returns:
-            dict: Booking data or None if not found
-        """
-        bookings_collection = get_collection(cls.collection)
-        return bookings_collection.find_one({"booking_id": booking_id})
+    @property
+    def subtotal(self) -> float:
+        """Calculate subtotal for this ticket item"""
+        return self.quantity * self.unit_price
+
+
+class PaymentDetails(BaseModel):
+    """Payment details model"""
+    method: str = Field(..., description="Payment method (UPI, credit card, etc.)")
+    transaction_id: Optional[str] = Field(None, description="Transaction ID from payment provider")
+    utr: Optional[str] = Field(None, description="UPI Transaction Reference (UTR)")
+    amount: float = Field(..., description="Amount paid")
+    currency: str = Field("INR", description="Currency of payment")
+    status: PaymentStatus = Field(PaymentStatus.PENDING, description="Payment status")
+    payment_date: Optional[datetime] = Field(None, description="Date and time of payment")
     
-    @classmethod
-    def create(cls, booking_data):
-        """
-        Create a new booking.
-        
-        Args:
-            booking_data (dict): Booking data
-            
-        Returns:
-            dict: Created booking with ID
-        """
-        bookings_collection = get_collection(cls.collection)
-        
-        # Generate booking ID
-        booking_id = f"booking_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Set creation timestamp and default fields
-        booking_data["booking_id"] = booking_id
-        booking_data["created_at"] = datetime.now()
-        booking_data["status"] = "pending"
-        
-        # Calculate total amount if not provided
-        if "total_amount" not in booking_data and "event_id" in booking_data and "quantity" in booking_data:
-            event = Event.find_by_id(booking_data["event_id"])
-            if event:
-                price = event.get("price", 0)
-                quantity = booking_data["quantity"]
-                booking_data["total_amount"] = price * quantity
-        
-        # Insert booking
-        bookings_collection.insert_one(booking_data)
-        
-        # Update event availability
-        if "event_id" in booking_data and "quantity" in booking_data:
-            Event.update_availability(booking_data["event_id"], -booking_data["quantity"])
-        
-        return {
-            "booking_id": booking_id,
-            "status": "pending",
-            "total_amount": booking_data.get("total_amount", 0)
-        }
+    @validator('amount')
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Amount must be greater than 0")
+        return v
+
+
+class Ticket(BaseModel):
+    """Individual ticket model with QR code"""
+    ticket_id: str = Field(..., description="Unique ticket identifier")
+    ticket_type: str = Field(..., description="Type of ticket")
+    seat_info: Optional[str] = Field(None, description="Seat information if applicable")
+    qr_code: Optional[str] = Field(None, description="QR code data or URL")
+    attendee_name: Optional[str] = Field(None, description="Name of the attendee")
+    checked_in: bool = Field(False, description="Whether the ticket has been checked in")
+    check_in_time: Optional[datetime] = Field(None, description="Time when the ticket was checked in")
+
+
+class BookingBase(BaseModel):
+    """Base booking model with common fields"""
+    event_id: str = Field(..., description="ID of the event")
+    event_title: str = Field(..., description="Title of the event")
+    event_date: datetime = Field(..., description="Date and time of the event")
+    customer_info: CustomerInfo = Field(..., description="Customer information")
+    tickets: List[TicketItem] = Field(..., description="List of ticket items")
+    total_amount: float = Field(..., description="Total amount of the booking")
+    booking_date: datetime = Field(default_factory=datetime.now, description="Date and time of booking")
+    expiry_date: Optional[datetime] = Field(None, description="Expiry date for pending bookings")
+    payment: PaymentDetails = Field(..., description="Payment details")
+    status: BookingStatus = Field(BookingStatus.PENDING, description="Booking status")
     
-    @classmethod
-    def update_status(cls, booking_id, status, additional_data=None):
-        """
-        Update the status of a booking.
-        
-        Args:
-            booking_id (str): ID of the booking to update
-            status (str): New status
-            additional_data (dict, optional): Additional data to update
-            
-        Returns:
-            dict: Updated booking or None if not found
-        """
-        bookings_collection = get_collection(cls.collection)
-        
-        # Find booking
-        booking = cls.find_by_id(booking_id)
-        if not booking:
-            logger.warning(f"Booking not found for status update: {booking_id}")
-            return None
-        
-        # Prepare update data
-        update_data = {"status": status}
-        if additional_data:
-            update_data.update(additional_data)
-        
-        # Add update timestamp
-        update_data["updated_at"] = datetime.now()
-        
-        # Update booking
-        bookings_collection.update_one(
-            {"booking_id": booking_id},
-            {"$set": update_data}
-        )
-        
-        # Handle expired bookings
-        if status == "expired":
-            # Release ticket inventory
-            event_id = booking.get("event_id")
-            quantity = booking.get("quantity", 1)
-            
-            if event_id:
-                Event.update_availability(event_id, quantity)
-        
-        # Return updated booking
-        return cls.find_by_id(booking_id)
+    @validator('tickets')
+    def validate_tickets(cls, v):
+        if not v:
+            raise ValueError("At least one ticket must be included in the booking")
+        return v
     
-    @classmethod
-    def verify_payment(cls, booking_id, utr):
-        """
-        Verify payment for a booking.
-        
-        Args:
-            booking_id (str): ID of the booking to verify
-            utr (str): UTR (Unique Transaction Reference) from payment
-            
-        Returns:
-            dict: Response with status and message
-        """
-        # Validate UTR format - should be 10-23 alphanumeric characters
-        if not re.match(r'^[A-Za-z0-9]{10,23}$', utr):
-            logger.warning(f"Invalid UTR format: {utr}")
-            return {
-                "status": "error",
-                "message": "Invalid UTR format. Please enter the correct UTR number from your payment confirmation."
+    @validator('total_amount')
+    def validate_total_amount(cls, v, values):
+        if 'tickets' in values:
+            calculated_total = sum(ticket.quantity * ticket.unit_price for ticket in values['tickets'])
+            if abs(v - calculated_total) > 0.01:  # Allow small difference due to floating point
+                raise ValueError(f"Total amount ({v}) does not match calculated total ({calculated_total})")
+        return v
+
+
+class BookingCreate(BaseModel):
+    """Booking create model"""
+    event_id: str = Field(..., description="ID of the event")
+    customer_info: CustomerInfo = Field(..., description="Customer information")
+    tickets: Dict[str, int] = Field(..., description="Dictionary of ticket type IDs and quantities")
+    payment_method: str = Field("UPI", description="Payment method")
+    
+    @validator('tickets')
+    def validate_tickets(cls, v):
+        if not v:
+            raise ValueError("At least one ticket must be included in the booking")
+        for qty in v.values():
+            if qty <= 0:
+                raise ValueError("Ticket quantity must be greater than 0")
+        return v
+
+
+class BookingInDB(BookingBase):
+    """Booking model as stored in the database"""
+    booking_id: str = Field(..., description="Unique booking identifier")
+    generated_tickets: Optional[List[Ticket]] = Field(None, description="Generated tickets after confirmation")
+    notes: Optional[str] = Field(None, description="Internal notes about the booking")
+    created_at: datetime = Field(default_factory=datetime.now, description="When the booking was created")
+    updated_at: Optional[datetime] = Field(None, description="When the booking was last updated")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "booking_id": "bkg_12345",
+                "event_id": "evt_12345",
+                "event_title": "IPL 2023: Mumbai Indians vs Chennai Super Kings",
+                "event_date": "2023-04-15T19:30:00",
+                "customer_info": {
+                    "name": "Rahul Sharma",
+                    "email": "rahul.sharma@example.com",
+                    "phone": "9876543210"
+                },
+                "tickets": [
+                    {
+                        "ticket_type_id": "premium",
+                        "ticket_type_name": "Premium",
+                        "quantity": 2,
+                        "unit_price": 3500.0
+                    }
+                ],
+                "total_amount": 7000.0,
+                "booking_date": "2023-04-01T15:30:00",
+                "expiry_date": "2023-04-01T16:00:00",
+                "payment": {
+                    "method": "UPI",
+                    "transaction_id": "UPI123456789",
+                    "utr": "123456789012",
+                    "amount": 7000.0,
+                    "status": "completed",
+                    "payment_date": "2023-04-01T15:35:00"
+                },
+                "status": "confirmed",
+                "generated_tickets": [
+                    {
+                        "ticket_id": "TKT123456",
+                        "ticket_type": "Premium",
+                        "qr_code": "data:image/png;base64,iVBORw0KG...",
+                        "attendee_name": "Rahul Sharma",
+                        "checked_in": false
+                    },
+                    {
+                        "ticket_id": "TKT123457",
+                        "ticket_type": "Premium",
+                        "qr_code": "data:image/png;base64,iVBORw0KG...",
+                        "attendee_name": "Guest",
+                        "checked_in": false
+                    }
+                ],
+                "created_at": "2023-04-01T15:30:00",
+                "updated_at": "2023-04-01T15:35:00"
             }
-        
-        # Find booking
-        booking = cls.find_by_id(booking_id)
-        
-        if not booking:
-            logger.warning(f"Booking not found for payment verification: {booking_id}")
-            return {
-                "status": "error",
-                "message": "Booking not found"
-            }
-        
-        # Check if booking is expired (older than 30 minutes)
-        booking_time = booking.get("created_at", datetime.now())
-        if isinstance(booking_time, str):
-            try:
-                booking_time = datetime.fromisoformat(booking_time.replace('Z', '+00:00'))
-            except ValueError:
-                booking_time = datetime.now()
-                
-        time_diff = datetime.now() - booking_time
-        if time_diff.total_seconds() > 1800:  # 30 minutes
-            # Mark as expired and release inventory
-            cls.update_status(booking_id, "expired")
-            
-            logger.warning(f"Booking {booking_id} expired (created {time_diff.total_seconds()/60:.1f} minutes ago)")
-            return {
-                "status": "error",
-                "message": "This booking has expired. Please create a new booking."
-            }
-        
-        # Log the payment verification attempt
-        logger.info(f"Verifying payment for booking {booking_id} with UTR: {utr}")
-        
-        # Generate ticket ID - use a more unique format
-        # Combine booking ID with a short hash for more uniqueness
-        short_hash = hashlib.md5(f"{booking_id}-{utr}".encode()).hexdigest()[:6]
-        ticket_id = f"TKT-{booking_id[-5:]}-{short_hash}"
-        
-        # Update booking status
-        cls.update_status(
-            booking_id, 
-            "confirmed", 
-            {
-                "utr": utr,
-                "payment_verified_at": datetime.now(),
-                "ticket_id": ticket_id
-            }
-        )
-        
-        logger.info(f"Payment verified for booking {booking_id}. Ticket ID: {ticket_id}")
-        
-        return {
-            "status": "success",
-            "booking_id": booking_id,
-            "ticket_id": ticket_id,
-            "message": "Payment verified successfully"
         }
+
+
+class BookingResponse(BookingInDB):
+    """Booking response model"""
+    pass
+
+
+class BookingUpdate(BaseModel):
+    """Booking update model with all fields optional"""
+    customer_info: Optional[CustomerInfo] = None
+    status: Optional[BookingStatus] = None
+    payment: Optional[PaymentDetails] = None
+    notes: Optional[str] = None
+
+
+class BookingList(BaseModel):
+    """Booking list response model"""
+    bookings: List[BookingResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class PaymentVerificationRequest(BaseModel):
+    """Payment verification request model"""
+    booking_id: str = Field(..., description="ID of the booking to verify payment for")
+    utr: str = Field(..., description="UPI Transaction Reference number")
     
-    @classmethod
-    def get_ticket(cls, ticket_id):
-        """
-        Get ticket information by ticket ID.
-        
-        Args:
-            ticket_id (str): ID of the ticket to find
-            
-        Returns:
-            dict: Ticket data or None if not found
-        """
-        bookings_collection = get_collection(cls.collection)
-        booking = bookings_collection.find_one({"ticket_id": ticket_id})
-        
-        if not booking:
-            return None
-            
-        # Get event details
-        event_id = booking.get("event_id")
-        event = Event.find_by_id(event_id) if event_id else None
-        
-        # Format ticket response
-        ticket = {
-            "ticket_id": ticket_id,
-            "booking_id": booking.get("booking_id"),
-            "status": booking.get("status"),
-            "quantity": booking.get("quantity", 1),
-            "customer_info": booking.get("customer_info", {}),
-            "event": Event.format_response(event) if event else None,
-            "created_at": booking.get("created_at"),
-            "verified_at": booking.get("payment_verified_at")
-        }
-        
-        return ticket
-    
-    @classmethod
-    def cleanup_expired(cls):
-        """
-        Clean up expired bookings (older than 30 minutes).
-        
-        Returns:
-            dict: Results of the cleanup operation
-        """
-        bookings_collection = get_collection(cls.collection)
-        
-        # Find bookings older than 30 minutes that are still pending
-        thirty_mins_ago = datetime.now() - timedelta(minutes=30)
-        
-        # Find expired bookings
-        expired_bookings = list(bookings_collection.find({
-            "status": "pending",
-            "created_at": {"$lt": thirty_mins_ago}
-        }))
-        
-        expired_count = 0
-        inventory_updated = 0
-        
-        # Process each expired booking
-        for booking in expired_bookings:
-            booking_id = booking.get("booking_id")
-            cls.update_status(booking_id, "expired")
-            expired_count += 1
-            inventory_updated += 1  # update_status handles releasing inventory
-        
-        logger.info(f"Cleaned up {expired_count} expired bookings, updated {inventory_updated} event inventories")
-        
-        return {
-            "expired_count": expired_count,
-            "inventory_updated": inventory_updated
-        }
-    
-    @classmethod
-    def format_response(cls, booking):
-        """
-        Format a booking for API response.
-        
-        Args:
-            booking (dict): Booking data from database
-            
-        Returns:
-            dict: Formatted booking data
-        """
-        if not booking:
-            return None
-            
-        # Convert MongoDB _id to id if needed
-        if '_id' in booking:
-            booking['id'] = str(booking.pop('_id'))
-            
-        # Format dates
-        for date_field in ['created_at', 'updated_at', 'payment_verified_at']:
-            if date_field in booking and isinstance(booking[date_field], datetime):
-                booking[date_field] = booking[date_field].isoformat()
-                
-        return booking 
+    @validator('utr')
+    def validate_utr(cls, v):
+        if not v or len(v) < 8:
+            raise ValueError("UTR must be at least 8 characters")
+        return v 

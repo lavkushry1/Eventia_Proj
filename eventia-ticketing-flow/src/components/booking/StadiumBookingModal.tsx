@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import StadiumSelector from './StadiumSelector';
 import StadiumSeatMap from './StadiumSeatMap';
+import CircularStadiumMap from './CircularStadiumMap';
+import PremiumStadiumView from './PremiumStadiumView';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
@@ -41,6 +43,24 @@ interface Stadium {
   // Other stadium properties not needed here
 }
 
+// Add a new interface for individual seat data
+interface StadiumSeat {
+  id: string;
+  row: string;
+  number: number;
+  price: number;
+  status: 'available' | 'selected' | 'unavailable' | 'reserved';
+  rating?: 'best_value' | 'hot' | 'popular' | 'limited' | null;
+  view_quality?: 'excellent' | 'good' | 'limited' | null;
+}
+
+// Add seat view data interface
+interface SeatViewImage {
+  section_id: string;
+  image_url: string;
+  description: string;
+}
+
 const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
   isOpen,
   onClose,
@@ -51,8 +71,26 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
   const [selectedTab, setSelectedTab] = useState('stadium');
   const [selectedStadium, setSelectedStadium] = useState<Stadium | null>(null);
   const [selectedSections, setSelectedSections] = useState<StadiumSection[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'map' | 'circular' | 'premium'>('list');
+  const [timeRemaining, setTimeRemaining] = useState<number>(300); // 5 minutes in seconds
+  const [selectedSeats, setSelectedSeats] = useState<{[key: string]: StadiumSeat[]}>({});
+  const [seatViews, setSeatViews] = useState<SeatViewImage[]>([]);
   
+  // Generate mock data for seat views when a stadium is selected
+  useEffect(() => {
+    if (selectedStadium) {
+      // Generate mock seat view data
+      const mockViews = selectedStadium.sections.slice(0, 3).map(section => ({
+        section_id: section.section_id,
+        image_url: `https://placehold.co/600x400/007ACC/FFF?text=View+from+${section.name}`,
+        description: `This is the view from the ${section.name} section. This section offers a ${
+          section.is_vip ? 'premium' : 'standard'
+        } viewing experience.`
+      }));
+      setSeatViews(mockViews);
+    }
+  }, [selectedStadium]);
+
   // When a stadium is selected, convert its sections to include 'selected' count
   useEffect(() => {
     if (selectedStadium) {
@@ -65,6 +103,42 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
       setSelectedSections(sectionsWithSelection);
     }
   }, [selectedStadium]);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (selectedTab === 'sections' && timeRemaining > 0) {
+      const timer = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [selectedTab, timeRemaining]);
+
+  // Reset timer when moving back to stadium selection
+  useEffect(() => {
+    if (selectedTab === 'stadium') {
+      setTimeRemaining(300); // Reset to 5 minutes
+    }
+  }, [selectedTab]);
+
+  // Time's up handler
+  useEffect(() => {
+    if (timeRemaining === 0) {
+      toast({
+        title: "Time's up!",
+        description: "Your seat selection time has expired.",
+        variant: "destructive"
+      });
+      // Optionally reset or take other actions
+    }
+  }, [timeRemaining]);
 
   const handleStadiumSelect = (stadium: Stadium) => {
     setSelectedStadium(stadium);
@@ -95,6 +169,103 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
   const totalTickets = selectedSections.reduce((sum, section) => sum + (section.selected || 0), 0);
   const totalAmount = calculateTotal();
   
+  // Handle individual seat selection
+  const handleSeatSelect = (sectionId: string, seatId: string, selected: boolean) => {
+    // Find the section
+    const section = selectedSections.find(s => s.section_id === sectionId);
+    if (!section) return;
+
+    // Update section selection counts
+    setSelectedSections(prev => 
+      prev.map(section => 
+        section.section_id === sectionId 
+          ? { 
+              ...section, 
+              selected: (section.selected || 0) + (selected ? 1 : -1)
+            } 
+          : section
+      )
+    );
+
+    // Track individual seats (for premium view)
+    setSelectedSeats(prev => {
+      const newSeats = {...prev};
+      if (!newSeats[sectionId]) newSeats[sectionId] = [];
+      
+      // Mock a seat object if we don't have the actual one
+      const mockSeat: StadiumSeat = {
+        id: seatId,
+        row: seatId.split('-')[0] || 'A',
+        number: parseInt(seatId.split('-')[1] || '1'),
+        price: section.price,
+        status: selected ? 'selected' : 'available'
+      };
+      
+      if (selected) {
+        newSeats[sectionId] = [...newSeats[sectionId], mockSeat];
+      } else {
+        newSeats[sectionId] = newSeats[sectionId].filter(seat => seat.id !== seatId);
+      }
+      
+      return newSeats;
+    });
+  };
+
+  // Generate sections with seat data for premium view
+  const getSectionsWithSeats = () => {
+    if (!selectedStadium) return [];
+    
+    return selectedStadium.sections.map(section => {
+      // Generate mock seats for each section
+      const seats: StadiumSeat[] = [];
+      const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+      
+      rows.forEach((row, rowIndex) => {
+        for (let i = 1; i <= 10; i++) {
+          const seatId = `${row}-${i}`;
+          const isSelected = selectedSeats[section.section_id]?.some(seat => seat.id === seatId) || false;
+          
+          // Randomly assign some seats as unavailable or with special ratings
+          const random = Math.random();
+          let status: 'available' | 'selected' | 'unavailable' | 'reserved' = 'available';
+          let rating = null;
+          
+          if (isSelected) {
+            status = 'selected';
+          } else if (random < 0.1) {
+            status = 'unavailable';
+          } else if (random < 0.15) {
+            status = 'reserved';
+          } else {
+            // Only available seats can have ratings
+            if (random > 0.8) rating = 'hot';
+            else if (random > 0.75) rating = 'best_value';
+            else if (random > 0.7) rating = 'popular';
+            else if (random > 0.65) rating = 'limited';
+          }
+          
+          seats.push({
+            id: seatId,
+            row,
+            number: i,
+            price: section.price + (rowIndex < 3 ? 500 : 0), // Premium rows cost more
+            status,
+            rating: rating as 'best_value' | 'hot' | 'popular' | 'limited' | null,
+            view_quality: rowIndex < 2 ? 'excellent' : rowIndex < 5 ? 'good' : 'limited'
+          });
+        }
+      });
+      
+      return {
+        ...section,
+        rows: rows.length,
+        seats_per_row: 10,
+        base_price: section.price,
+        seats
+      };
+    });
+  };
+
   const handleProceedToCheckout = () => {
     // Only include sections with selections
     const sectionsWithSelections = selectedSections
@@ -177,10 +348,43 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
                     >
                       Map View
                     </Button>
+                    <Button 
+                      variant={viewMode === 'circular' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setViewMode('circular')}
+                    >
+                      Stadium View
+                    </Button>
+                    <Button 
+                      variant={viewMode === 'premium' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setViewMode('premium')}
+                    >
+                      Premium
+                    </Button>
                   </div>
                 </div>
 
-                {viewMode === 'map' ? (
+                {viewMode === 'premium' ? (
+                  <PremiumStadiumView
+                    stadiumName={selectedStadium.name}
+                    sections={getSectionsWithSeats()}
+                    onSeatSelect={handleSeatSelect}
+                    totalAmount={totalAmount}
+                    totalSeats={totalTickets}
+                    timeRemaining={timeRemaining}
+                    seatViews={seatViews}
+                  />
+                ) : viewMode === 'circular' ? (
+                  <CircularStadiumMap
+                    stadiumName={selectedStadium.name}
+                    sections={selectedSections}
+                    onSectionSelect={handleSectionSelect}
+                    totalAmount={totalAmount}
+                    totalTickets={totalTickets}
+                    timeRemaining={timeRemaining}
+                  />
+                ) : viewMode === 'map' ? (
                   <StadiumSeatMap 
                     stadiumName={selectedStadium.name}
                     sections={selectedSections.map(section => ({
@@ -193,6 +397,14 @@ const StadiumBookingModal: React.FC<StadiumBookingModalProps> = ({
                   />
                 ) : (
                   <div className="space-y-4">
+                    {timeRemaining > 0 && selectedTab === 'sections' && (
+                      <div className="bg-indigo-900 text-white py-2 px-4 rounded-md">
+                        <div className="text-center">
+                          <span className="font-medium">You have approximately {Math.floor(timeRemaining / 60)} minutes</span> to select your seats.
+                        </div>
+                      </div>
+                    )}
+                    
                     {selectedSections.map((section) => (
                       <div 
                         key={section.section_id}

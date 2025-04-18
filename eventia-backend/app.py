@@ -1,33 +1,49 @@
+#!/usr/bin/env python3
+"""
+Eventia Backend - Main Application
+---------------------------------
+Main entry point for the Eventia Ticketing Platform API.
+This follows MVC architecture with clear separation of concerns.
+"""
+
+import os
+import time
+import uuid
 from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.openapi.docs import get_swagger_ui_html
-import os
-import time
-import uuid
 from pathlib import Path
 
-from .core.config import settings, logger
-from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings
-from .middleware.security import SecurityHeadersMiddleware, RateLimiter
+# Import configuration
+from config.settings import settings
+from config.database import connect_to_mongo, close_mongo_connection, init_default_settings
 
-# Import routers
-from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views
+# Import middleware
+from middleware.security import SecurityHeadersMiddleware, RateLimiter
+from middleware.auth import get_current_user, get_current_admin_user
+
+# Import controllers (routers)
+from controllers.auth_controller import router as auth_router
+from controllers.event_controller import router as event_router
+from controllers.booking_controller import router as booking_router
+from controllers.stadium_controller import router as stadium_router
+from controllers.admin_controller import router as admin_router
+from controllers.setting_controller import router as setting_router
 
 # Create FastAPI app
 app = FastAPI(
     title="Eventia API",
     description="API for the Eventia ticketing platform",
     version="1.0.0",
-    docs_url=None,  # Disable default docs to use custom route
+    docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],  # In production, specify your domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,13 +61,14 @@ app.add_middleware(
     exempted_ips=["127.0.0.1"]
 )
 
-# Create uploads directory if it doesn't exist
-uploads_dir = Path(__file__).parent / "static" / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
+# Create static directories if they don't exist
+static_dir = Path(__file__).parent / "static"
+uploads_dir = static_dir / "uploads"
+teams_dir = static_dir / "teams"
+stadium_views_dir = static_dir / "stadium_views"
 
-# Create teams directory if it doesn't exist
-teams_dir = Path(__file__).parent / "static" / "teams"
-teams_dir.mkdir(parents=True, exist_ok=True)
+for directory in [uploads_dir, teams_dir, stadium_views_dir]:
+    directory.mkdir(parents=True, exist_ok=True)
 
 # Middleware for request ID and logging
 @app.middleware("http")
@@ -70,7 +87,7 @@ async def add_process_time_header(request: Request, call_next):
         response.headers["X-Request-ID"] = request_id
         
         # Log request
-        logger.info(
+        print(
             f"Request: {request.method} {request.url.path} - "
             f"Status: {response.status_code} - "
             f"Time: {process_time:.4f}s - "
@@ -80,7 +97,7 @@ async def add_process_time_header(request: Request, call_next):
         return response
     except Exception as e:
         process_time = time.time() - start_time
-        logger.error(
+        print(
             f"Request: {request.method} {request.url.path} - "
             f"Error: {str(e)} - "
             f"Time: {process_time:.4f}s - "
@@ -95,7 +112,7 @@ async def add_process_time_header(request: Request, call_next):
 # Global exception handler for expected exceptions
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    logger.warning(
+    print(
         f"HTTPException: {exc.status_code} {exc.detail} - "
         f"Request: {request.method} {request.url.path}"
     )
@@ -104,62 +121,34 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={"detail": exc.detail}
     )
 
-# Global exception handler for unexpected exceptions
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(
-        f"Unhandled exception: {str(exc)} - "
-        f"Request: {request.method} {request.url.path}",
-        exc_info=True
-    )
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"}
-    )
-
-# Mount static files directory for uploads
-app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")
-
-# Mount specific static directory for team logos
-app.mount("/static/teams", StaticFiles(directory=str(teams_dir)), name="teams")
+# Mount static files directory
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_db_client():
-    logger.info("Starting up Eventia API server...")
+    print("Starting up Eventia API server...")
     await connect_to_mongo()
     init_default_settings()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    logger.info("Shutting down Eventia API server...")
+    print("Shutting down Eventia API server...")
     await close_mongo_connection()
 
-# Include routers
-app.include_router(auth.router)
-app.include_router(events.router)
-app.include_router(bookings.router)
-app.include_router(settings_router.router)
-app.include_router(admin.router)  # No prefix as it already has its own prefix
-app.include_router(stadiums.router)
-app.include_router(stadium_views.router)
+# Include routers with API prefix
+app.include_router(auth_router, prefix="/api")
+app.include_router(event_router, prefix="/api")
+app.include_router(booking_router, prefix="/api")
+app.include_router(stadium_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
+app.include_router(setting_router, prefix="/api")
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])
 async def health_check():
     """Health check endpoint to verify the API is running."""
     return {"status": "ok"}
-
-# Custom Swagger UI with authentication
-@app.get("/api/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
-    return get_swagger_ui_html(
-        openapi_url=f"{settings.API_V1_STR}/openapi.json",
-        title=f"{settings.PROJECT_NAME} - API Documentation",
-        oauth2_redirect_url=f"{settings.API_V1_STR}/docs/oauth2-redirect",
-        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui-bundle.js",
-        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui.css",
-    )
 
 # Root endpoint
 @app.get("/")
@@ -168,4 +157,9 @@ async def root():
         "message": "Welcome to Eventia Ticketing Platform API",
         "docs": "/api/docs",
         "version": "1.0.0"
-    } 
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 3003))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True) 

@@ -22,6 +22,8 @@ import hashlib
 import shutil
 from werkzeug.utils import secure_filename
 from bson.objectid import ObjectId  # needed for update endpoints
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -571,40 +573,6 @@ def health():
     return jsonify({ "status": "ok", "version": "1.0.0" })
 
 if __name__ == '__main__':
-    # Get port from environment or use 3004 as default
-    APP_PORT = int(os.environ.get('PORT', 3004))
-    
-    # Get environment setting, default to production
-    APP_ENV = os.environ.get('FLASK_ENV', 'production')
-    
-    # Configure host based on environment
-    APP_HOST = '0.0.0.0'
-    
-    # Debug mode only in development
-    DEBUG_MODE = APP_ENV == 'development'
-    
-    # Start memory profiler
-    memory_profiler.start()
-    
-    logger.info(f"Starting Eventia Flask server on {APP_HOST}:{APP_PORT} in {APP_ENV} mode...")
-    logger.info("API endpoints available:")
-    logger.info("  GET  /api/events")
-    logger.info("  GET  /api/events/<event_id>")
-    logger.info("  POST /api/bookings")
-    logger.info("  POST /api/verify-payment")
-    logger.info("  GET  /health")
-    logger.info("  GET  /metrics")
-    logger.info("  GET  /api/config/public")  # Add log for new endpoint
-    
-    try:
-        # In production, should use a proper WSGI server
-        if APP_ENV == 'production':
-            from waitress import serve
-            serve(app, host=APP_HOST, port=APP_PORT)
-        else:
-            app.run(host=APP_HOST, port=APP_PORT, debug=DEBUG_MODE)
-    except Exception as e:
-        logger.error(f"Server error: {e}")
-    finally:
-        # Stop memory profiler when server stops
-        memory_profiler.stop()
+    port = int(os.getenv('PORT', 3002))
+    host = os.getenv('HOST', '0.0.0.0')
+    app.run(host=host, port=port)
