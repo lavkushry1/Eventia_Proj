@@ -16,6 +16,7 @@ import AdminImageUploads from "./pages/AdminImageUploads";
 import ARVenuePreview from "./pages/ARVenuePreview";
 import NotFound from "./pages/NotFound";
 import About from "./pages/About";
+import AdminDiscountManagement from "./pages/AdminDiscountManagement";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,8 @@ const App = () => (
         <Route path="/admin-utr" element={<AdminUtrVerification />} />
         <Route path="/admin-images" element={<AdminImageUploads />} />
         <Route path="/admin/event/:eventId/images" element={<AdminImageUploads />} />
+        <Route path="/admin-discounts" element={<AdminDiscountManagement />} />
+        <Route path="/admin/discounts" element={<Navigate to="/admin-discounts" replace />} />
         <Route path="/venue-preview/:id" element={<ARVenuePreview />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

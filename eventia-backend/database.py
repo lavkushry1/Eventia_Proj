@@ -62,6 +62,13 @@ def setup_indexes():
     db.bookings.create_index("event_id")
     db.bookings.create_index("booking_date")
     
+    # Discounts collection indexes
+    db.discounts.create_index("discount_code", unique=True)
+    db.discounts.create_index("active")
+    db.discounts.create_index("valid_till")
+    db.discounts.create_index("valid_from")
+    db.discounts.create_index("used_count")
+    
     print("Database indexes created successfully")
 
 # Call this function when the application starts

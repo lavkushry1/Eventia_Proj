@@ -183,21 +183,29 @@ export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent): UIEvent => {
 };
 
 // Convert frontend booking data to backend BookingCreate model
-export const mapUIBookingToApiBooking = (
+export function mapUIBookingToApiBooking(
   eventId: string,
   quantity: number,
-  customerInfo: CustomerInfo
-) => {
+  customerInfo: {
+    name: string;
+    email: string;
+    phone: string;
+    address?: string;
+  },
+  discountCode?: string
+) {
   return {
     event_id: eventId,
-    customer_info: customerInfo,
-    selected_tickets: [{
-      ticket_type_id: 'default', // This should be a proper ticket type ID
-      quantity: quantity,
-      price_per_ticket: 0 // This should be the actual price
-    }] as SelectedTicket[]
+    quantity,
+    customer_info: {
+      name: customerInfo.name,
+      email: customerInfo.email,
+      phone: customerInfo.phone,
+      address: customerInfo.address || ""
+    },
+    discount_code: discountCode || undefined
   };
-};
+}
 
 export interface UIBooking {
   bookingId: string;

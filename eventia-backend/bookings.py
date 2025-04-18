@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from database import get_db, serialize_object_id
 
 # Import models
-from models import BookingCreate, Booking, UTRSubmission
+from models import BookingCreate, Booking, UTRSubmission, DiscountValidation, DiscountValidationResponse
 
 # Import auth utilities
 from auth import verify_admin_token
@@ -42,13 +42,60 @@ async def book_ticket(
     
     # Calculate total amount
     total_amount = event["ticket_price"] * booking.quantity
+    discount_amount = 0
+    
+    # Apply discount if provided
+    if hasattr(booking, 'discount_code') and booking.discount_code:
+        # Validate the discount code
+        discount_validation = DiscountValidation(
+            discount_code=booking.discount_code,
+            event_id=booking.event_id,
+            ticket_quantity=booking.quantity
+        )
+        
+        # Use the validation endpoint logic directly
+        discount = db.discounts.find_one({"discount_code": discount_validation.discount_code.upper()})
+        
+        if discount and discount.get("active", False):
+            # Check usage limits
+            if discount.get("used_count", 0) < discount.get("max_uses", 0):
+                # Check validity period
+                current_time = datetime.now()
+                valid_from = datetime.strptime(discount["valid_from"], "%Y-%m-%d %H:%M:%S")
+                valid_till = datetime.strptime(discount["valid_till"], "%Y-%m-%d %H:%M:%S")
+                
+                if current_time >= valid_from and current_time <= valid_till:
+                    # Check event applicability
+                    applicable_events = discount.get("applicable_events", [])
+                    if not applicable_events or booking.event_id in applicable_events:
+                        # Calculate discount
+                        if discount["discount_type"] == "percentage":
+                            discount_amount = (discount["value"] / 100) * total_amount
+                        else:  # fixed
+                            discount_amount = min(discount["value"], total_amount)
+                        
+                        # Apply minimum price threshold
+                        MIN_PRICE = 1
+                        if (total_amount - discount_amount) < MIN_PRICE:
+                            discount_amount = total_amount - MIN_PRICE
+                        
+                        # Increment usage count for the discount
+                        db.discounts.update_one(
+                            {"discount_code": discount_validation.discount_code.upper()},
+                            {"$inc": {"used_count": 1}}
+                        )
+    
+    # Apply discount to total
+    final_amount = total_amount - discount_amount
     
     # Create booking
     booking_dict = booking.model_dump()
     booking_dict["booking_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     booking_dict["status"] = "pending"
     booking_dict["payment_status"] = "pending"
-    booking_dict["total_amount"] = total_amount
+    booking_dict["total_amount"] = final_amount
+    booking_dict["original_amount"] = total_amount
+    booking_dict["discount_amount"] = discount_amount
     
     # Save booking
     result = db.bookings.insert_one(booking_dict)
@@ -67,7 +114,9 @@ async def book_ticket(
     return {
         "booking_id": str(booking_id),
         "status": "pending",
-        "total_amount": total_amount,
+        "total_amount": final_amount,
+        "original_amount": total_amount,
+        "discount_amount": discount_amount,
         "payment_info": {
             "vpa": vpa,
             "description": f"Eventia ticket for {event['title']}"

@@ -1,59 +1,46 @@
 """
-Security middleware for adding security headers to all responses
+Security headers middleware.
+
+This module provides security headers middleware to enhance API security.
 """
-
-from typing import Callable
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.types import ASGIApp
-
+from fastapi import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from typing import Dict
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
-    Middleware that adds security headers to HTTP responses.
+    Middleware to add security headers to all responses.
     
-    These headers help protect against common web vulnerabilities:
-    - X-Content-Type-Options: Prevents MIME type sniffing
-    - X-Frame-Options: Controls whether the page can be displayed in frames
-    - X-XSS-Protection: Enables browser's XSS filtering
-    - Strict-Transport-Security: Forces HTTPS connections
-    - Content-Security-Policy: Restricts sources of content
+    This helps protect against various security vulnerabilities
+    by setting appropriate HTTP headers.
     """
     
-    def __init__(
-        self, 
-        app: ASGIApp,
-        content_security_policy: str = None
-    ):
+    async def dispatch(self, request, call_next):
         """
-        Initialize the security headers middleware.
-        
-        Args:
-            app: The ASGI application
-            content_security_policy: Custom CSP header (optional)
-        """
-        super().__init__(app)
-        self.content_security_policy = content_security_policy or "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'"
-        
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
-        """
-        Process the request and add security headers to the response.
+        Add security headers to the response.
         
         Args:
             request: The incoming request
-            call_next: The next request handler
+            call_next: The next middleware in the chain
             
         Returns:
-            The response with security headers added
+            The response with added security headers
         """
         response = await call_next(request)
         
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = self.content_security_policy
+        # Add security headers
+        headers = {
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "X-XSS-Protection": "1; mode=block",
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'",
+            "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
+        }
         
-        return response 
+        # Add headers to response
+        for key, value in headers.items():
+            response.headers[key] = value
+            
+        return response

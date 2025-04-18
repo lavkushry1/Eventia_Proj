@@ -1,125 +1,127 @@
 """
-Rate limiting middleware to protect against API abuse
+Rate limiter middleware.
+
+This module provides a rate limiting middleware to protect against abuse.
 """
-
-import time
-from typing import Dict, List, Optional, Set, Tuple
 from fastapi import Request, Response, status
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.types import ASGIApp
+from starlette.middleware.base import BaseHTTPMiddleware
+from typing import List, Dict, Optional, Set
+import time
+import asyncio
 
+from ..core.config import logger
 
 class RateLimiter(BaseHTTPMiddleware):
-    """
-    Middleware that implements rate limiting based on client IP addresses.
+    """Rate limiting middleware to protect against abuse.
     
-    Restricts the number of requests a client can make within a specified time window.
-    Supports IP exemptions for trusted clients.
+    This middleware tracks requests by IP address and applies rate limits
+    to prevent abuse of the API.
     """
     
     def __init__(
-        self,
-        app: ASGIApp,
-        limit: int = 100,
-        window: int = 60,
-        exempt_ips: Optional[List[str]] = None,
-        limited_endpoints: Optional[List[str]] = None,
+        self, 
+        app, 
+        rate_limit: int = 100,
+        time_window: int = 60,
+        exempted_routes: Optional[List[str]] = None,
+        exempted_ips: Optional[List[str]] = None
     ):
         """
         Initialize the rate limiter middleware.
         
         Args:
-            app: The ASGI application
-            limit: Maximum number of requests allowed per window
-            window: Time window in seconds
-            exempt_ips: List of IP addresses exempt from rate limiting
-            limited_endpoints: List of endpoints to apply rate limiting to (if None, applies to all)
+            app: The FastAPI application
+            rate_limit: Maximum number of requests allowed in the time window
+            time_window: Time window in seconds
+            exempted_routes: List of routes exempt from rate limiting
+            exempted_ips: List of IP addresses exempt from rate limiting
         """
         super().__init__(app)
-        self.limit = limit
-        self.window = window
-        self.exempt_ips = set(exempt_ips or [])
-        self.limited_endpoints = limited_endpoints
-        self.requests: Dict[str, List[float]] = {}
+        self.rate_limit = rate_limit
+        self.time_window = time_window
+        self.exempted_routes = set(exempted_routes or [])
+        self.exempted_ips = set(exempted_ips or [])
+        self.request_records: Dict[str, List[float]] = {}
         
-    def _is_rate_limited(self, client_ip: str) -> bool:
-        """
-        Check if a client has exceeded their rate limit.
-        
-        Args:
-            client_ip: The client's IP address
-            
-        Returns:
-            True if rate limited, False otherwise
-        """
-        # Exempt IPs bypass rate limiting
-        if client_ip in self.exempt_ips:
-            return False
-            
-        # Get current time
-        current_time = time.time()
-        
-        # If this is the first request from this IP, add it
-        if client_ip not in self.requests:
-            self.requests[client_ip] = [current_time]
-            return False
-            
-        # Filter requests to only those within the current window
-        self.requests[client_ip] = [
-            req_time for req_time in self.requests[client_ip]
-            if current_time - req_time < self.window
-        ]
-        
-        # Add the current request
-        self.requests[client_ip].append(current_time)
-        
-        # Check if the limit is exceeded
-        return len(self.requests[client_ip]) > self.limit
+        # Clean up old records periodically
+        self.cleanup_task = asyncio.create_task(self._cleanup_old_records())
     
-    def _should_limit_endpoint(self, path: str) -> bool:
+    async def _cleanup_old_records(self) -> None:
+        """Periodically clean up old request records to prevent memory leaks."""
+        while True:
+            try:
+                await asyncio.sleep(300)  # Run every 5 minutes
+                current_time = time.time()
+                
+                # Clean up records older than the time window
+                for ip, timestamps in list(self.request_records.items()):
+                    self.request_records[ip] = [
+                        ts for ts in timestamps 
+                        if current_time - ts < self.time_window
+                    ]
+                    
+                    # Remove empty entries
+                    if not self.request_records[ip]:
+                        del self.request_records[ip]
+                        
+                logger.debug(f"Cleaned up rate limiter records. Active IPs: {len(self.request_records)}")
+            except Exception as e:
+                logger.error(f"Error in rate limiter cleanup: {e}")
+    
+    async def dispatch(self, request: Request, call_next) -> Response:
         """
-        Determine if rate limiting should be applied to the endpoint.
-        
-        Args:
-            path: The request path
-            
-        Returns:
-            True if the endpoint should be rate limited, False otherwise
-        """
-        if self.limited_endpoints is None:
-            return True
-            
-        return any(path.startswith(endpoint) for endpoint in self.limited_endpoints)
-        
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
-        """
-        Process the request, applying rate limiting if necessary.
+        Process the request and apply rate limiting.
         
         Args:
             request: The incoming request
-            call_next: The next request handler
+            call_next: The next middleware in the chain
             
         Returns:
-            The response, or a 429 status if rate limited
+            The response from the next middleware
         """
+        # Check if route is exempted
+        if any(request.url.path.startswith(route) for route in self.exempted_routes):
+            return await call_next(request)
+        
         # Get client IP
-        client_ip = request.client.host if request.client else "0.0.0.0"
+        client_ip = request.client.host if request.client else "unknown"
         
-        # Check if this endpoint should be rate limited
-        if self._should_limit_endpoint(request.url.path):
-            # Check if client is rate limited
-            if self._is_rate_limited(client_ip):
-                return Response(
-                    content="Rate limit exceeded. Please try again later.",
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    headers={
-                        "Retry-After": str(self.window),
-                        "X-Rate-Limit-Limit": str(self.limit),
-                        "X-Rate-Limit-Window": f"{self.window}s",
-                    },
-                )
+        # Check if IP is exempted
+        if client_ip in self.exempted_ips:
+            return await call_next(request)
         
-        # Proceed with the request
-        return await call_next(request) 
+        # Apply rate limiting
+        current_time = time.time()
+        
+        # Initialize record for new IP
+        if client_ip not in self.request_records:
+            self.request_records[client_ip] = []
+        
+        # Clean up old timestamps
+        self.request_records[client_ip] = [
+            ts for ts in self.request_records[client_ip] 
+            if current_time - ts < self.time_window
+        ]
+        
+        # Check if rate limit exceeded
+        if len(self.request_records[client_ip]) >= self.rate_limit:
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            return Response(
+                content='{"detail":"Too many requests"}',
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                media_type="application/json"
+            )
+        
+        # Record request timestamp
+        self.request_records[client_ip].append(current_time)
+        
+        # Process request
+        response = await call_next(request)
+        
+        # Add rate limit headers
+        remaining = self.rate_limit - len(self.request_records[client_ip])
+        response.headers["X-RateLimit-Limit"] = str(self.rate_limit)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, remaining))
+        response.headers["X-RateLimit-Reset"] = str(int(current_time + self.time_window))
+        
+        return response

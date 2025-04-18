@@ -31,7 +31,8 @@ import {
   Loader2,
   Search,
   RefreshCw,
-  Image
+  Image,
+  Tag
 } from 'lucide-react';
 import { 
   Table, 
@@ -169,6 +170,10 @@ const AdminDashboard = () => {
                 <TabsTrigger value="payments" className="flex items-center">
                   <DollarSign className="h-4 w-4 mr-2" />
                   Payment Settings
+                </TabsTrigger>
+                <TabsTrigger value="discounts" className="flex items-center">
+                  <Tag className="h-4 w-4 mr-2" />
+                  Discounts
                 </TabsTrigger>
                 <TabsTrigger value="users" className="flex items-center">
                   <Users className="h-4 w-4 mr-2" />
@@ -638,6 +643,29 @@ const AdminDashboard = () => {
                     </Card>
                   </div>
                 </div>
+              </TabsContent>
+              
+              <TabsContent value="discounts">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Discount Management</CardTitle>
+                    <CardDescription>
+                      Create and manage discount codes for your events
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <p>
+                        Manage discount codes for event tickets. You can create percentage or fixed amount discounts,
+                        set validity periods, and specify which events they apply to.
+                      </p>
+                      <Button onClick={() => navigate('/admin-discounts')} className="flex items-center">
+                        <Tag className="mr-2 h-4 w-4" />
+                        Go to Discount Management
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
               
               <TabsContent value="users">

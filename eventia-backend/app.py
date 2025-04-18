@@ -30,6 +30,7 @@ from controllers.booking_controller import router as booking_router
 from controllers.stadium_controller import router as stadium_router
 from controllers.admin_controller import router as admin_router
 from controllers.setting_controller import router as setting_router
+from controllers.discount_controller import router as discount_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -143,6 +144,7 @@ app.include_router(booking_router, prefix="/api")
 app.include_router(stadium_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(setting_router, prefix="/api")
+app.include_router(discount_router, prefix="/api")
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])

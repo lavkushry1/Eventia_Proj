@@ -18,6 +18,7 @@ import { FormField, FormItem, FormLabel, FormControl } from '@/components/ui/for
 import { z } from 'zod';
 import { Select, SelectItem } from '@/components/ui/select';
 import { config } from '../config';
+import DiscountCodeInput from '@/components/checkout/DiscountCodeInput';
 
 // Define CustomerInfo interface locally if not exported from adapters
 interface CustomerInfo {
@@ -48,6 +49,8 @@ interface BookingData {
   eventDate?: string;
   eventTime?: string;
   eventVenue?: string;
+  discountCode?: string;
+  discountAmount?: number;
   teams?: {
     team1: {
       name: string;
@@ -160,6 +163,8 @@ const Checkout = () => {
   const [bookingCreatedTime, setBookingCreatedTime] = useState<Date | null>(null);
   const [paymentMode, setPaymentMode] = useState<'vpa' | 'qr_image'>('vpa');
   const [qrImage, setQrImage] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState<string | null>(null);
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
 
   // Payment settings
   const [paymentSettings, setPaymentSettings] = useState({
@@ -217,11 +222,13 @@ const Checkout = () => {
       eventId: string;
       quantity: number;
       customerInfo: CustomerInfo;
+      discountCode?: string;
     }) => {
       return createBooking(mapUIBookingToApiBooking(
         data.eventId,
         data.quantity,
-        data.customerInfo
+        data.customerInfo,
+        data.discountCode
       ));
     },
     onSuccess: (response: ApiBookingResponse) => {
@@ -300,26 +307,82 @@ const Checkout = () => {
     }
   }, [navigate]);
 
+  // Handle discount application
+  const handleDiscountApplied = (code: string, amount: number) => {
+    setDiscountCode(code);
+    setDiscountAmount(amount);
+    
+    // Update booking data with discount
+    if (bookingData) {
+      setBookingData({
+        ...bookingData,
+        discountCode: code,
+        discountAmount: amount
+      });
+    }
+  };
+  
+  // Handle discount removal
+  const handleDiscountRemoved = () => {
+    setDiscountCode(null);
+    setDiscountAmount(0);
+    
+    // Update booking data without discount
+    if (bookingData) {
+      const updatedBookingData = { ...bookingData };
+      delete updatedBookingData.discountCode;
+      delete updatedBookingData.discountAmount;
+      setBookingData(updatedBookingData);
+    }
+  };
+
   const handleSubmitCustomerInfo = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate customer info
-    if (!customerInfo.name || !customerInfo.email || !customerInfo.phone) {
+    if (!bookingData) return;
+    
+    // Form validation...
+    const requiredFields = ['name', 'email', 'phone'];
+    const missingFields = requiredFields.filter(field => !customerInfo[field as keyof CustomerInfo]);
+    
+    if (missingFields.length > 0) {
       toast({
         title: "Missing information",
-        description: "Please fill in all required fields.",
+        description: `Please fill in the following: ${missingFields.join(", ")}`,
         variant: "destructive"
       });
       return;
     }
-
-    if (!bookingData) return;
     
-    // Submit booking to API
+    // Validate email
+    if (!/^\S+@\S+\.\S+$/.test(customerInfo.email)) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Validate phone
+    if (!/^\d{10}$/.test(customerInfo.phone)) {
+      toast({
+        title: "Invalid phone number",
+        description: "Please enter a valid 10-digit phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Get total quantity of tickets
+    const totalQuantity = bookingData.tickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
+    
+    // Create booking
     bookTicketMutation.mutate({
       eventId: bookingData.eventId,
-      quantity: bookingData.tickets[0].quantity,
-      customerInfo
+      quantity: totalQuantity, 
+      customerInfo,
+      discountCode: discountCode || undefined
     });
   };
 
@@ -562,48 +625,48 @@ const Checkout = () => {
               </div>
               
               {step === 1 && (
-                <form onSubmit={handleSubmitCustomerInfo}>
+                <form onSubmit={handleSubmitCustomerInfo} className="space-y-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Your Information</h3>
                     
-                  <div>
+                    <div>
                       <Label htmlFor="name">Full Name *</Label>
-                    <Input 
-                      id="name" 
-                      placeholder="Enter your full name"
+                      <Input 
+                        id="name" 
+                        placeholder="Enter your full name"
                         value={customerInfo.name}
                         onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
                         required
-                    />
-                  </div>
-                  
-                  <div>
+                      />
+                    </div>
+                    
+                    <div>
                       <Label htmlFor="email">Email *</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="Enter your email"
+                      <Input 
+                        id="email" 
+                        type="email" 
+                        placeholder="Enter your email"
                         value={customerInfo.email}
                         onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
                         required
-                    />
-                  </div>
-                  
-                  <div>
+                      />
+                    </div>
+                    
+                    <div>
                       <Label htmlFor="phone">Phone Number *</Label>
-                    <Input 
-                      id="phone" 
-                      placeholder="Enter your phone number"
+                      <Input 
+                        id="phone" 
+                        placeholder="Enter your phone number"
                         value={customerInfo.phone}
                         onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
                         required
-                    />
-                  </div>
-                  
-                  <div>
+                      />
+                    </div>
+                    
+                    <div>
                       <Label htmlFor="address">Address *</Label>
-                    <Input 
-                      id="address" 
+                      <Input 
+                        id="address" 
                         placeholder="Enter your address"
                         value={customerInfo.address}
                         onChange={(e) => setCustomerInfo({...customerInfo, address: e.target.value})}
@@ -645,23 +708,35 @@ const Checkout = () => {
                     </div>
                   </div>
 
-                  <Button
-                    type="submit"
-                    className="mt-6 w-full"
-                    disabled={bookTicketMutation.isPending}
-                  >
-                    {bookTicketMutation.isPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        Continue to Payment
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
+                  {/* Add discount code section */}
+                  {bookingData && (
+                    <div className="mt-8">
+                      <DiscountCodeInput 
+                        eventId={bookingData.eventId}
+                        ticketQuantity={bookingData.tickets.reduce((sum, ticket) => sum + ticket.quantity, 0)}
+                        originalAmount={bookingData.totalAmount}
+                        onDiscountApplied={handleDiscountApplied}
+                        onDiscountRemoved={handleDiscountRemoved}
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="pt-4">
+                    <Button 
+                      type="submit" 
+                      className="w-full" 
+                      disabled={bookTicketMutation.isPending}
+                    >
+                      {bookTicketMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        'Proceed to Payment'
+                      )}
+                    </Button>
+                  </div>
                 </form>
               )}
 
@@ -696,13 +771,13 @@ const Checkout = () => {
                           </p>
                         </div>
                         <div className="flex gap-2">
-                      <Button 
+                          <Button 
                             type="button"
-                        variant="outline" 
+                            variant="outline" 
                             onClick={handleBackToPaymentOptions}
-                      >
-                        Back to Payment Options
-                      </Button>
+                          >
+                            Back to Payment Options
+                          </Button>
                           <Button
                             type="submit"
                             className="flex-1"
@@ -721,7 +796,7 @@ const Checkout = () => {
                       </div>
                     </form>
                   }
-                    </div>
+                </div>
               )}
 
               {step === 3 && ticketQRData && (
@@ -733,11 +808,11 @@ const Checkout = () => {
                   <div className="mt-4">
                     <p className="font-medium">Booking ID: {bookingId}</p>
                     <p className="text-gray-600">Show this QR code at the venue entrance</p>
-              </div>
+                  </div>
                   <Button className="mt-6" onClick={() => window.print()}>
                     Print Ticket
                   </Button>
-            </div>
+                </div>
               )}
             </CardContent>
           </Card>

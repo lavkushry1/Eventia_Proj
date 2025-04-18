@@ -42,6 +42,7 @@ class BookingCreate(BaseModel):
     event_id: str
     quantity: int = 1
     customer_info: CustomerInfo
+    discount_code: Optional[str] = None
 
 class Booking(BookingCreate):
     """Model for returning bookings with additional fields"""
@@ -98,4 +99,52 @@ class AnalyticsDashboard(BaseModel):
     summary: BookingSummary
     payment_status: PaymentStatus
     revenue_trends: List[Dict[str, Any]]
-    popular_events: List[Dict[str, Any]] 
+    popular_events: List[Dict[str, Any]]
+
+# Discount Models
+class DiscountBase(BaseModel):
+    """Base model for discount data"""
+    discount_code: str
+    discount_type: str  # percentage or fixed
+    value: float
+    applicable_events: List[str] = []
+    valid_from: str
+    valid_till: str
+    max_uses: int
+    active: bool = True
+    used_count: int = 0
+
+class DiscountCreate(DiscountBase):
+    """Model for creating discounts"""
+    pass
+
+class Discount(DiscountBase):
+    """Model for returning discounts with ID"""
+    id: str = Field(alias="_id")
+
+    class Config:
+        populate_by_name = True
+
+class DiscountValidation(BaseModel):
+    """Model for discount code validation request"""
+    discount_code: str
+    event_id: str
+    ticket_quantity: int = 1
+
+class DiscountValidationResponse(BaseModel):
+    """Response model for discount validation"""
+    valid: bool
+    discount_amount: float = 0
+    message: str
+    
+class BulkDiscountCreate(BaseModel):
+    """Model for bulk discount creation"""
+    count: int
+    prefix: str = ""
+    discount_type: str
+    value: float
+    applicable_events: List[str] = []
+    valid_from: str
+    valid_till: str
+    max_uses: int
+    active: bool = True 
