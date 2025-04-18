@@ -52,6 +52,13 @@ declare module 'axios' {
   }
 }
 
+// Extend AxiosInstance for admin image uploads
+declare module 'axios' {
+  interface AxiosInstance {
+    uploadEventLogo(eventId: string, file: File): Promise<{ logo_url: string }>;
+  }
+}
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: config().API_BASE_URL,
@@ -97,6 +104,14 @@ api.uploadEventPoster = (eventId: string, file: File) => {
   const formData = new FormData();
   formData.append('poster', file);
   return api.post(`/api/events/${eventId}/poster`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }).then(resp => resp.data);
+};
+
+api.uploadEventLogo = (eventId: string, file: File) => {
+  const formData = new FormData();
+  formData.append('logo', file);
+  return api.post(`/api/events/${eventId}/logo`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }).then(resp => resp.data);
 };

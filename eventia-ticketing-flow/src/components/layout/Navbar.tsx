@@ -29,7 +29,7 @@ const Navbar = () => {
             <Link to="/events" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
               Events
             </Link>
-            <Link to="/ipl-tickets" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
+            <Link to="/events?category=IPL" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
               IPL Tickets
             </Link>
             <Link to="/about" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
@@ -76,7 +76,7 @@ const Navbar = () => {
           >
             Events
           </Link>
-          <Link to="/ipl-tickets" 
+          <Link to="/events?category=IPL" 
             className="block text-gray-700 hover:text-primary px-3 py-2 rounded-md"
             onClick={() => setIsOpen(false)}
           >

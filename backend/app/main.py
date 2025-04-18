@@ -12,7 +12,7 @@ from .core.config import settings, logger
 from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings
 
 # Import routers
-from .routers import auth, events, bookings, settings as settings_router, admin
+from .routers import auth, events, bookings, settings as settings_router, admin, stadiums
 
 # Create FastAPI app
 app = FastAPI(
@@ -128,6 +128,7 @@ app.include_router(events.router, prefix=settings.API_V1_STR)
 # app.include_router(bookings.router, prefix=settings.API_V1_STR)
 # app.include_router(settings_router.router, prefix=settings.API_V1_STR)
 app.include_router(admin.router)  # No prefix as it already has its own prefix
+app.include_router(stadiums.router)
 
 # Health check endpoint
 @app.get("/health")

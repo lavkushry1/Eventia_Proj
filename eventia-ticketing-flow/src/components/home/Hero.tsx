@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays, Ticket, ArrowRight } from 'lucide-react';
@@ -30,7 +29,7 @@ const Hero = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4">
-            <Link to="/ipl-tickets">
+            <Link to="/events?category=IPL">
               <AnimatedButton size="lg" className="bg-secondary hover:bg-secondary/90 text-white" animation="pulse">
                 <Ticket className="mr-2 h-5 w-5" />
                 Book IPL Tickets

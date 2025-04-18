@@ -7,5 +7,6 @@
     "generate-logos": "node generate_team_logos.js"
   },
   "dependencies": {
+    "framer-motion": "^12.7.4"
   }
-} 
+}
