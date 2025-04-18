@@ -27,12 +27,20 @@ const EventCard = ({ event }: EventCardProps) => {
 
   // Check if this is an IPL match
   const isIplMatch = event.category === 'IPL' && event.teams;
+  
+  // Handle image URL - check if it's a relative or absolute URL
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const imageUrl = event.image ? 
+    (event.image.startsWith('http') || event.image.startsWith('/assets')) ? 
+      event.image : 
+      `${apiBaseUrl}${event.image}` 
+    : "/placeholder.svg";
 
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
       <div className="relative">
         <img 
-          src={event.image || "/placeholder.svg"} 
+          src={imageUrl} 
           alt={event.title} 
           className="w-full h-48 object-cover"
           onError={(e) => {

@@ -94,6 +94,26 @@ const AdminEventEditor = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEditing = !!id;
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const uploadPosterMutation = useMutation((file: File) => api.uploadEventPoster(id as string, file), {
+    onSuccess: (data) => {
+      toast({ title: 'Success', description: 'Poster uploaded successfully.' });
+      form.setValue('image_url', data.image_url);
+      setPosterFile(null);
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to upload poster.', variant: 'destructive' });
+    }
+  });
+
+  const updateVenueMutation = useMutation((venue: string) => api.updateEventVenue(id as string, venue), {
+    onSuccess: () => {
+      toast({ title: 'Success', description: 'Venue updated successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update venue.', variant: 'destructive' });
+    }
+  });
 
   // Placeholder for a fetch function - in a real app, this would be an API call
   const fetchEvent = async (id: string): Promise<ApiEvent> => {
@@ -236,17 +256,14 @@ const AdminEventEditor = () => {
 
   // Handle form submission
   const onSubmit = (data: EventFormValues) => {
-    console.log('Form submitted:', data);
-    
-    // Simulate successful submission
-    toast({
-      title: isEditing ? "Event updated" : "Event created",
-      description: `${data.title} has been ${isEditing ? 'updated' : 'created'} successfully.`,
-    });
-    
-    // Redirect to dashboard
+    if (isEditing) {
+      updateVenueMutation.mutate(data.venue);
+    } else {
+      // Create new event logic here
+      toast({ title: 'Event created', description: `${data.title} has been created successfully.` });
+    }
     navigate('/admin-dashboard');
-  };
+  }
 
   return (
     <AdminProtectedRoute>
@@ -291,9 +308,6 @@ const AdminEventEditor = () => {
                   <Card>
                     <CardHeader>
                       <CardTitle>Basic Information</CardTitle>
-                      <CardDescription>
-                        Enter the basic details about the event
-                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <FormField
@@ -418,6 +432,34 @@ const AdminEventEditor = () => {
                           </FormItem>
                         )}
                       />
+
+                      {/* Poster upload section */}
+                      <div className="space-y-2">
+                        <FormLabel>Current Poster</FormLabel>
+                        {form.getValues('image_url') && (
+                          <img
+                            src={form.getValues('image_url')}
+                            alt="Event Poster"
+                            className="w-48 h-auto rounded shadow"
+                          />
+                        )}
+                        <FormLabel>Upload New Poster</FormLabel>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setPosterFile(e.target.files?.[0] ?? null)}
+                        />
+                        <Button
+                          type="button"
+                          disabled={!posterFile || uploadPosterMutation.isLoading}
+                          onClick={() => posterFile && uploadPosterMutation.mutate(posterFile)}
+                        >
+                          {uploadPosterMutation.isLoading ? 'Uploading...' : 'Upload Poster'}
+                        </Button>
+                        {uploadPosterMutation.isError && (
+                          <p className="text-red-500">Failed to upload poster.</p>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                   
@@ -918,4 +960,4 @@ const AdminEventEditor = () => {
   );
 };
 
-export default AdminEventEditor; 
+export default AdminEventEditor;

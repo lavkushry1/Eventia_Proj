@@ -1,3 +1,9 @@
+/**
+ * @Author: Roni Laukkarinen
+ * @Date:   2025-04-18 17:01:14
+ * @Last Modified by:   Roni Laukkarinen
+ * @Last Modified time: 2025-04-18 18:01:29
+ */
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import configManager, { config } from '../config';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,6 +44,14 @@ declare module 'axios' {
   }
 }
 
+// Extend AxiosInstance for admin event updates
+declare module 'axios' {
+  interface AxiosInstance {
+    updateEventVenue(eventId: string, venue: string): Promise<{ venue: string }>;
+    uploadEventPoster(eventId: string, file: File): Promise<{ image_url: string }>;
+  }
+}
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: config().API_BASE_URL,
@@ -71,6 +85,19 @@ api.submitUTR = (data: UTRSubmission) => verifyPayment(data);
 api.cleanupExpiredBookings = (token: string) => {
   return api.post('/admin/bookings/cleanup', {}, {
     headers: { Authorization: `Bearer ${token}` }
+  }).then(resp => resp.data);
+};
+
+// Admin-specific event updates
+api.updateEventVenue = (eventId: string, venue: string) => {
+  return api.put(`/api/events/${eventId}`, { venue }).then(resp => resp.data);
+};
+
+api.uploadEventPoster = (eventId: string, file: File) => {
+  const formData = new FormData();
+  formData.append('poster', file);
+  return api.post(`/api/events/${eventId}/poster`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
   }).then(resp => resp.data);
 };
 
@@ -537,4 +564,28 @@ export async function fetchAppConfig() {
     console.error('Error fetching app config:', error);
     throw error;
   }
-} 
+}
+
+/**
+ * Upload an image to the server
+ * @param endpoint The API endpoint path 
+ * @param formData FormData containing the file and other parameters
+ * @returns API response with image URL
+ */
+export const uploadImage = async (endpoint: string, formData: FormData) => {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  
+  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
+    method: 'POST',
+    credentials: 'include',  // Include cookies for authentication
+    body: formData,
+    // Don't set Content-Type header - browser will set it with boundary for FormData
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to upload image');
+  }
+  
+  return response.json();
+};

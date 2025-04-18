@@ -30,7 +30,8 @@ import {
   Eye,
   Loader2,
   Search,
-  RefreshCw
+  RefreshCw,
+  Image
 } from 'lucide-react';
 import { 
   Table, 
@@ -172,6 +173,10 @@ const AdminDashboard = () => {
                 <TabsTrigger value="users" className="flex items-center">
                   <Users className="h-4 w-4 mr-2" />
                   User Management
+                </TabsTrigger>
+                <TabsTrigger value="images" className="flex items-center">
+                  <Image className="h-4 w-4 mr-2" />
+                  Image Management
                 </TabsTrigger>
                 <TabsTrigger value="settings" className="flex items-center">
                   <Settings className="h-4 w-4 mr-2" />
@@ -646,6 +651,30 @@ const AdminDashboard = () => {
                 </CardContent>
               </Card>
             </TabsContent>
+
+              <TabsContent value="images">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Image Management</CardTitle>
+                    <CardDescription>
+                      Upload and manage event posters, venue images, and team logos
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <p>
+                        Use this section to upload and manage images for events, venues, and teams.
+                      </p>
+                      <div className="flex flex-wrap gap-4">
+                        <Button onClick={() => navigate('/admin-images')}>
+                          <Image className="h-4 w-4 mr-2" />
+                          Manage Images
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
               <TabsContent value="settings">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

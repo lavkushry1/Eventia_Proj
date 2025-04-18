@@ -21,6 +21,7 @@ import re
 import hashlib
 import shutil
 from werkzeug.utils import secure_filename
+from bson.objectid import ObjectId  # needed for update endpoints
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -991,8 +992,43 @@ def get_payment_metrics():
         logger.error(f"Error fetching payment metrics: {e}")
         return jsonify({"error": str(e)}), 500
 
-# Create uploads directory if it doesn't exist
+# Ensure upload directory exists
 os.makedirs("static/uploads", exist_ok=True)
+
+@app.route('/api/events/<event_id>', methods=['PUT'])
+@log_execution_time
+def update_event_venue(event_id):
+    # Only admin can update venue
+    auth_header = request.headers.get('Authorization')
+    if not check_bearer_token(auth_header):
+        return 'Unauthorized', 401
+    data = request.json or {}
+    venue = data.get('venue')
+    if not venue:
+        return jsonify({'error': 'Venue is required'}), 400
+    result = db.events.update_one({'_id': ObjectId(event_id)}, {'$set': {'venue': venue}})
+    if result.matched_count == 0:
+        return jsonify({'error': 'Event not found'}), 404
+    return jsonify({'venue': venue}), 200
+
+@app.route('/api/events/<event_id>/poster', methods=['POST'])
+@log_execution_time
+def upload_event_poster(event_id):
+    # Only admin can update poster
+    auth_header = request.headers.get('Authorization')
+    if not check_bearer_token(auth_header):
+        return 'Unauthorized', 401
+    if 'poster' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['poster']
+    filename = secure_filename(file.filename)
+    file_path = os.path.join('static/uploads', filename)
+    file.save(file_path)
+    image_url = f'/static/uploads/{filename}'
+    result = db.events.update_one({'_id': ObjectId(event_id)}, {'$set': {'image_url': image_url}})
+    if result.matched_count == 0:
+        return jsonify({'error': 'Event not found'}), 404
+    return jsonify({'image_url': image_url}), 200
 
 # Serve static files
 @app.route('/static/<path:path>')

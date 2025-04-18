@@ -12,6 +12,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AdminEventManagement from "./pages/AdminEventManagement";
 import AdminUpiManagement from "./pages/AdminUpiManagement";
 import AdminUtrVerification from "./pages/AdminUtrVerification";
+import AdminImageUploads from "./pages/AdminImageUploads";
 import ARVenuePreview from "./pages/ARVenuePreview";
 import NotFound from "./pages/NotFound";
 import About from "./pages/About";
@@ -37,6 +38,8 @@ const App = () => (
         <Route path="/admin-upi" element={<AdminUpiManagement />} />
         <Route path="/admin/upi-management" element={<Navigate to="/admin-upi" replace />} />
         <Route path="/admin-utr" element={<AdminUtrVerification />} />
+        <Route path="/admin-images" element={<AdminImageUploads />} />
+        <Route path="/admin/event/:eventId/images" element={<AdminImageUploads />} />
         <Route path="/venue-preview/:id" element={<ARVenuePreview />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
