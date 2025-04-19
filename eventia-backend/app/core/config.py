@@ -27,7 +27,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:8080",  # Frontend development server
+        "http://127.0.0.1:8080",  # Alternative frontend URL
+        "http://localhost:5173",  # Vite default
+        "http://localhost:3000",  # React default
+        # Add production domains when deploying
+    ]
+    
+    # For compatibility with both naming conventions
+    CORS_ORIGINS = BACKEND_CORS_ORIGINS
     
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

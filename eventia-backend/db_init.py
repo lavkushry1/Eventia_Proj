@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Roni Laukkarinen
+# @Date:   2025-04-18 17:01:14
+# @Last Modified by:   Roni Laukkarinen
+# @Last Modified time: 2025-04-19 13:23:43
 import asyncio
 import logging
 import os
@@ -5,6 +10,8 @@ from typing import Dict, Any
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
+from core.database import get_db
+from core.config import settings
 
 # Import seed data
 from seed_data import seed_database
@@ -38,10 +45,9 @@ async def init_indexes(mongodb_uri: str):
     logger.info("Indexes created successfully!")
 
 async def main():
-    # Load environment variables
+    # Load environment variables and settings
     load_dotenv()
-    
-    mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/eventia")
+    mongodb_uri = settings.MONGO_URI
     drop_existing = os.getenv("DROP_EXISTING", "").lower() == "true"
     
     try:
@@ -56,5 +62,16 @@ async def main():
         logger.error(f"Database initialization failed: {e}")
         raise
 
+# Add this function after existing functions
+async def test_db_connection():
+    """
+    Test database mapping and connection.
+    
+    Returns:
+        List[Dict]: List of events from the database (limited to 1)
+    """
+    db = await get_db()
+    return await db.events.find().limit(1).to_list(1)
+
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

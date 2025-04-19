@@ -17,8 +17,8 @@ import TeamBadge from '@/components/TeamBadge';
 import { FormField, FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { z } from 'zod';
 import { Select, SelectItem } from '@/components/ui/select';
-import { config } from '../config';
-import DiscountCodeInput from '@/components/checkout/DiscountCodeInput';
+import configManager from '../config';
+import { DiscountCodeInput } from '@/components/checkout/DiscountCodeInput';
 
 // Define CustomerInfo interface locally if not exported from adapters
 interface CustomerInfo {
@@ -31,14 +31,12 @@ interface CustomerInfo {
   pincode?: string;
 }
 
-// API Base URL for image paths
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002';
-
 interface TicketInfo {
   category: string;
   quantity: number;
   price: number;
   subtotal: number;
+  ticketTypeId?: string;
 }
 
 interface BookingData {
@@ -166,13 +164,22 @@ const Checkout = () => {
   const [discountCode, setDiscountCode] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
 
+  // Default payment settings from config
+  const defaultPaymentSettings = {
+    merchantName: configManager.config().MERCHANT_NAME,
+    vpaAddress: configManager.config().PAYMENT_VPA,
+    isPaymentEnabled: configManager.config().PAYMENT_ENABLED,
+    qrImageUrl: configManager.config().QR_IMAGE_URL,
+    type: 'payment_settings'
+  };
+
   // Payment settings
   const [paymentSettings, setPaymentSettings] = useState({
-    merchantName: config().MERCHANT_NAME,
-    vpaAddress: config().VPA_ADDRESS,
-    isPaymentEnabled: config().PAYMENT_ENABLED,
-    qrImageUrl: config().QR_IMAGE_URL,
-    paymentMode: 'vpa',  // Default to vpa mode
+    merchantName: defaultPaymentSettings.merchantName,
+    vpaAddress: defaultPaymentSettings.vpaAddress,
+    isPaymentEnabled: defaultPaymentSettings.isPaymentEnabled,
+    qrImageUrl: defaultPaymentSettings.qrImageUrl,
+    payment_mode: 'vpa',  // Default to vpa mode
   });
 
   // Fetch current payment settings from backend
@@ -185,11 +192,11 @@ const Checkout = () => {
   useEffect(() => {
     if (paymentSettingsData) {
       setPaymentSettings({
-        merchantName: paymentSettingsData.merchant_name || config().MERCHANT_NAME,
-        vpaAddress: paymentSettingsData.vpaAddress || config().VPA_ADDRESS,
-        isPaymentEnabled: paymentSettingsData.isPaymentEnabled !== undefined ? paymentSettingsData.isPaymentEnabled : config().PAYMENT_ENABLED,
-        qrImageUrl: paymentSettingsData.qrImageUrl || config().QR_IMAGE_URL,
-        paymentMode: paymentSettingsData.payment_mode || 'vpa',  // Use the payment_mode from server
+        merchantName: paymentSettingsData.merchant_name || defaultPaymentSettings.merchantName,
+        vpaAddress: paymentSettingsData.vpaAddress || defaultPaymentSettings.vpaAddress,
+        isPaymentEnabled: paymentSettingsData.isPaymentEnabled !== undefined ? paymentSettingsData.isPaymentEnabled : defaultPaymentSettings.isPaymentEnabled,
+        qrImageUrl: paymentSettingsData.qrImageUrl || defaultPaymentSettings.qrImageUrl,
+        payment_mode: paymentSettingsData.payment_mode || 'vpa',  // Use the payment_mode from server
       });
     }
   }, [paymentSettingsData]);
@@ -198,11 +205,6 @@ const Checkout = () => {
   useEffect(() => {
     if (paymentSettingsError) {
       console.error('Error fetching payment settings:', paymentSettingsError);
-      toast({
-        title: "Error",
-        description: "Could not load payment settings. Using default settings.",
-        variant: "destructive"
-      });
     }
   }, [paymentSettingsError]);
 
@@ -223,12 +225,14 @@ const Checkout = () => {
       quantity: number;
       customerInfo: CustomerInfo;
       discountCode?: string;
+      ticketTypeId?: string;
     }) => {
       return createBooking(mapUIBookingToApiBooking(
         data.eventId,
         data.quantity,
         data.customerInfo,
-        data.discountCode
+        data.discountCode,
+        data.ticketTypeId
       ));
     },
     onSuccess: (response: ApiBookingResponse) => {
@@ -382,7 +386,8 @@ const Checkout = () => {
       eventId: bookingData.eventId,
       quantity: totalQuantity, 
       customerInfo,
-      discountCode: discountCode || undefined
+      discountCode: discountCode || undefined,
+      ticketTypeId: bookingData.tickets[0]?.ticketTypeId
     });
   };
 
@@ -472,25 +477,14 @@ const Checkout = () => {
           <div className="flex-1 flex flex-col items-center justify-center p-4 border rounded-lg bg-gray-50">
             <p className="text-center mb-4 font-medium">Scan to pay ₹{paymentAmount.toFixed(2)}</p>
             
-            {paymentSettings.paymentMode === 'qr_image' && paymentSettings.qrImageUrl && !paymentSettings.qrImageUrl.includes('placeholder') ? (
-              // Show the custom QR image uploaded by admin
-              <div className="w-40 sm:w-56 md:w-64 relative mb-4">
+            {paymentSettings.payment_mode === 'qr_image' && paymentSettings.qrImageUrl && (
+              <div className="mb-4 flex justify-center">
                 <img 
                   src={paymentSettings.qrImageUrl.startsWith('http') 
                     ? paymentSettings.qrImageUrl 
-                    : `${config().API_BASE_URL.replace('/api', '')}${paymentSettings.qrImageUrl}`} 
-                  alt="Payment QR Code" 
-                  className="w-full h-auto object-contain"
-                />
-              </div>
-            ) : (
-              // Generate dynamic QR code for the VPA
-              <div className="w-40 sm:w-56 md:w-64 mb-4">
-                <QRCodeSVG 
-                  value={generateUpiQrData()}
-                  size={200}
-                  level="H"
-                  className="w-full h-auto"
+                    : `${configManager.config().API_BASE_URL.replace('/api', '')}${paymentSettings.qrImageUrl}`}
+                  alt="QR Code for payment" 
+                  className="w-56 h-56 object-contain" 
                 />
               </div>
             )}

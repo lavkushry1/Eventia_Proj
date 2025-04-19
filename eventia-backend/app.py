@@ -44,10 +44,17 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your domains
+    allow_origins=[
+        "http://localhost:8080",  # Frontend development server
+        "http://127.0.0.1:8080",  # Alternative frontend URL
+        "http://localhost:5173",  # Vite default
+        "http://localhost:3000",  # React default
+        # Add production domains when deploying
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["Content-Type", "X-Request-ID", "X-Process-Time"],
 )
 
 # Add security headers middleware

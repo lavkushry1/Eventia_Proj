@@ -31,7 +31,17 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app, resources={r"/*": {
+    "origins": [
+        "http://localhost:8080",  # Frontend development server
+        "http://127.0.0.1:8080",  # Alternative frontend URL
+        "http://localhost:5173",  # Vite default
+        "http://localhost:3000",  # React default
+        # Add production domains when deploying
+    ],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
+}}, supports_credentials=True)
 
 # MongoDB connection
 MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/eventia')

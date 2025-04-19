@@ -10,9 +10,9 @@ import { Label } from '../components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { CheckCircle, AlertCircle, Upload, RefreshCw } from 'lucide-react';
 import { adminUpdatePaymentSettings, fetchAppConfig } from '../lib/api';
-import configManager, { config } from '../config';
-import { Toaster } from 'react-hot-toast';
-import toast from 'react-hot-toast';
+import config from '@/config';
+import { Toaster } from '@/components/ui/toaster';
+import { toast } from '@/hooks/use-toast';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 
 interface ConfigSettingsForm {
@@ -21,6 +21,7 @@ interface ConfigSettingsForm {
   vpa_address: string;
   qr_image?: FileList;
   frontend_url: string;
+  payment_mode: string;
 }
 
 const AdminSettings: React.FC = () => {
@@ -32,10 +33,11 @@ const AdminSettings: React.FC = () => {
   
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ConfigSettingsForm>({
     defaultValues: {
-      payment_enabled: config().PAYMENT_ENABLED,
-      merchant_name: config().MERCHANT_NAME,
-      vpa_address: config().VPA_ADDRESS,
-      frontend_url: config().FRONTEND_URL,
+      payment_enabled: config.PAYMENT_ENABLED,
+      merchant_name: config.MERCHANT_NAME,
+      vpa_address: config.PAYMENT_VPA,
+      frontend_url: config.DOMAIN,
+      payment_mode: 'vpa',
     }
   });
   
@@ -51,34 +53,27 @@ const AdminSettings: React.FC = () => {
       reader.readAsDataURL(qrImageFile[0]);
     }
   }, [qrImageFile]);
-  
+
   // Fetch current settings
   useEffect(() => {
     const loadConfig = async () => {
       try {
         setIsLoading(true);
-        await fetchAppConfig();
-        
-        // Update form values
-        setValue('payment_enabled', config().PAYMENT_ENABLED);
-        setValue('merchant_name', config().MERCHANT_NAME);
-        setValue('vpa_address', config().VPA_ADDRESS);
-        setValue('frontend_url', config().FRONTEND_URL);
-        
-        // Update QR image preview if available
-        setCurrentQrImageUrl(config().QR_IMAGE_URL);
-      } catch (error) {
-        console.error('Error loading config:', error);
-        toast.error('Failed to load configuration settings');
+        const data = await fetchAppConfig();
+        setValue('payment_enabled', config.PAYMENT_ENABLED);
+        setValue('merchant_name', config.MERCHANT_NAME);
+        setValue('vpa_address', config.PAYMENT_VPA);
+        setValue('frontend_url', config.DOMAIN);
+        setCurrentQrImageUrl(config.QR_IMAGE_URL);
+        // merge server data...
+      } catch (err) {
+        toast({ title: 'Failed to load settings', description: String(err) });
       } finally {
         setIsLoading(false);
       }
     };
-    
-    if (isAuthenticated) {
-      loadConfig();
-    }
-  }, [isAuthenticated, setValue]);
+    loadConfig();
+  }, []);
   
   const onSubmit = async (data: ConfigSettingsForm) => {
     setIsLoading(true);
@@ -149,7 +144,6 @@ const AdminSettings: React.FC = () => {
   
   return (
     <div className="container mx-auto p-4">
-      <Toaster position="top-right" />
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Admin Configuration Settings</h1>
@@ -310,19 +304,18 @@ const AdminSettings: React.FC = () => {
                   
                   <div className="grid gap-2">
                     <h3 className="font-medium">Environment Information</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>API Base URL:</div>
-                      <div className="font-mono">{config().API_BASE_URL}</div>
-                      
-                      <div>Environment:</div>
-                      <div className="font-mono uppercase">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          config().ENV === 'production' 
-                            ? 'bg-red-100 text-red-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {config().ENV}
-                        </span>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">API Base URL:</div>
+                      <div className="font-mono">{config.API_BASE_URL}</div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">Environment:</div>
+                      <div className={`px-2 py-1 rounded text-xs ${
+                        config.ENV === 'production' 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {config.ENV}
                       </div>
                     </div>
                   </div>
@@ -339,11 +332,13 @@ const AdminSettings: React.FC = () => {
               type="button" 
               variant="outline" 
               onClick={() => {
-                setValue('payment_enabled', config().PAYMENT_ENABLED);
-                setValue('merchant_name', config().MERCHANT_NAME);
-                setValue('vpa_address', config().VPA_ADDRESS);
-                setValue('frontend_url', config().FRONTEND_URL);
-                setUploadedQrPreview(null);
+                setValue('payment_enabled', config.PAYMENT_ENABLED);
+                setValue('merchant_name', config.MERCHANT_NAME);
+                setValue('vpa_address', config.PAYMENT_VPA);
+                setValue('frontend_url', config.DOMAIN);
+                setValue('payment_mode', 'vpa');
+                setIsQrMode(false);
+                setCurrentQrImageUrl(config.QR_IMAGE_URL);
               }}
               disabled={isLoading}
             >
@@ -356,4 +351,4 @@ const AdminSettings: React.FC = () => {
   );
 };
 
-export default AdminSettings; 
+export default AdminSettings;

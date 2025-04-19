@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
-import { Info, Users, Star, Eye, ZoomIn, ZoomOut, RotateCw, ThumbsUp, AlertCircle } from 'lucide-react';
+import { Info, Users, Star, Eye, ZoomIn, ZoomOut, RotateCw, ThumbsUp, AlertCircle, Loader2 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -68,6 +68,49 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
   const [showBestDeals, setShowBestDeals] = useState(false);
   const [viewingMode, setViewingMode] = useState<'2d' | '3d'>('2d');
   const [viewPreview, setViewPreview] = useState<SeatViewImage | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Detect mobile screens and adjust layout
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Check if data is properly loaded
+  useEffect(() => {
+    if (sections && sections.length > 0) {
+      // Check if sections have seat data
+      const hasValidData = sections.every(section => 
+        section.seats && Array.isArray(section.seats) && section.seats.length > 0
+      );
+      
+      setIsLoading(!hasValidData);
+    } else {
+      setIsLoading(true);
+    }
+    
+    // Simulate loading time if needed
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [sections]);
+
+  // Memoize valid sections for performance
+  const validSections = useMemo(() => 
+    sections.filter(section => 
+      section && section.seats && Array.isArray(section.seats) && section.seats.length > 0
+    ), 
+    [sections]
+  );
   
   // Format time remaining
   const formatTime = (seconds?: number) => {
@@ -84,6 +127,8 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
 
   // Get a color based on seat status
   const getSeatColor = (seat: Seat) => {
+    if (!seat) return 'bg-gray-400 cursor-not-allowed opacity-50';
+    
     if (seat.status === 'selected') return 'bg-blue-500 hover:bg-blue-600';
     if (seat.status === 'unavailable') return 'bg-gray-400 cursor-not-allowed opacity-50';
     if (seat.status === 'reserved') return 'bg-yellow-400 cursor-not-allowed';
@@ -100,7 +145,9 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
 
   // Get tooltip content for seat
   const getSeatTooltip = (seat: Seat, sectionName: string) => {
-    let details = [
+    if (!seat) return 'Seat information not available';
+    
+    const details = [
       `${sectionName}, Row ${seat.row}, Seat ${seat.number}`,
       `Price: ₹${seat.price.toLocaleString()}`
     ];
@@ -116,7 +163,7 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
 
   // Handle seat click
   const handleSeatClick = (section: StadiumSection, seat: Seat) => {
-    if (seat.status === 'unavailable' || seat.status === 'reserved') {
+    if (!seat || seat.status === 'unavailable' || seat.status === 'reserved') {
       return; // Can't select unavailable or reserved seats
     }
     
@@ -129,11 +176,45 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
     return seatViews.find(view => view.section_id === sectionId) || null;
   };
 
+  // Keyboard navigation handler
+  const handleKeyDown = (e: React.KeyboardEvent, section: StadiumSection, seat: Seat) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleSeatClick(section, seat);
+    }
+  };
+
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="h-[500px] w-full flex items-center justify-center bg-gray-50 rounded-lg">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          <p>Loading stadium seat map...</p>
+          <span className="sr-only">Loading stadium seating layout, please wait</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Validate sections data
+  if (validSections.length === 0) {
+    return (
+      <div className="h-[400px] w-full flex items-center justify-center bg-gray-50 rounded-lg">
+        <div className="flex flex-col items-center gap-2 text-center px-4">
+          <AlertCircle className="h-8 w-8 text-amber-500" aria-hidden="true" />
+          <p className="font-medium">No seat data available</p>
+          <p className="text-sm text-gray-500">The stadium seat information could not be loaded correctly.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Timer bar */}
       {timeRemaining && (
-        <div className="bg-red-600 text-white p-3 rounded-md flex items-center justify-between">
+        <div className="bg-red-600 text-white p-3 rounded-md flex items-center justify-between" role="timer" aria-label="Time remaining for seat selection">
           <div className="flex items-center">
             <span className="font-medium">Time remaining:</span>
           </div>
@@ -148,7 +229,7 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Info className="h-4 w-4 text-gray-500" />
+                <Info className="h-4 w-4 text-gray-500" aria-hidden="true" />
               </TooltipTrigger>
               <TooltipContent>
                 <p className="max-w-xs">Select seats by clicking on the stadium sections below. 
@@ -158,14 +239,15 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
           </TooltipProvider>
         </div>
         
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             size="sm"
             onClick={() => setShowBestDeals(!showBestDeals)}
             className={showBestDeals ? "bg-green-100" : ""}
+            aria-pressed={showBestDeals}
           >
-            <Star className="h-4 w-4 mr-1" />
+            <Star className="h-4 w-4 mr-1" aria-hidden="true" />
             Best Deals
           </Button>
           
@@ -173,20 +255,36 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
             variant="outline"
             size="sm"
             onClick={() => setViewingMode(viewingMode === '2d' ? '3d' : '2d')}
+            aria-pressed={viewingMode === '3d'}
           >
-            <Eye className="h-4 w-4 mr-1" />
+            <Eye className="h-4 w-4 mr-1" aria-hidden="true" />
             {viewingMode === '2d' ? '3D View' : '2D View'}
           </Button>
           
           <div className="flex border rounded-md">
-            <Button variant="ghost" size="icon" onClick={() => setZoom(Math.max(zoom - 0.1, 0.5))}>
-              <ZoomOut className="h-4 w-4" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setZoom(Math.max(zoom - 0.1, 0.5))}
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(zoom + 0.1, 1.5))}>
-              <ZoomIn className="h-4 w-4" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setZoom(Math.min(zoom + 0.1, 1.5))}
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setRotation((rotation + 45) % 360)}>
-              <RotateCw className="h-4 w-4" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setRotation((rotation + 45) % 360)}
+              aria-label="Rotate view"
+            >
+              <RotateCw className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -195,7 +293,7 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
       {/* 3D perspective slider - only show in 3D mode */}
       {viewingMode === '3d' && (
         <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-lg">
-          <span className="text-sm">Angle:</span>
+          <span className="text-sm" id="perspective-label">Angle:</span>
           <Slider
             value={[perspective]}
             min={0}
@@ -203,55 +301,70 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
             step={1}
             onValueChange={(values) => setPerspective(values[0])}
             className="w-32"
+            aria-labelledby="perspective-label"
           />
         </div>
       )}
       
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 p-3 bg-gray-100 rounded-lg text-xs">
+      <div className="flex flex-wrap gap-3 p-3 bg-gray-100 rounded-lg text-xs" aria-label="Seat status legend">
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-gray-600 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-gray-600 rounded-full mr-1" aria-hidden="true"></div>
           <span>Available</span>
         </div>
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-blue-500 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-blue-500 rounded-full mr-1" aria-hidden="true"></div>
           <span>Selected</span>
         </div>
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-gray-400 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-gray-400 rounded-full mr-1" aria-hidden="true"></div>
           <span>Unavailable</span>
         </div>
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-yellow-400 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-yellow-400 rounded-full mr-1" aria-hidden="true"></div>
           <span>Reserved</span>
         </div>
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-red-500 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-red-500 rounded-full mr-1" aria-hidden="true"></div>
           <span>Hot Ticket</span>
         </div>
         <div className="flex items-center">
-          <div className="w-3 h-3 bg-green-500 rounded-full mr-1"></div>
+          <div className="w-3 h-3 bg-green-500 rounded-full mr-1" aria-hidden="true"></div>
           <span>Best Value</span>
         </div>
       </div>
       
       {/* Main stadium visualization */}
-      <div className="relative h-[500px] border rounded-xl overflow-hidden bg-gradient-to-b from-blue-50 to-gray-100">
+      <div 
+        className="relative h-[500px] border rounded-xl overflow-hidden bg-gradient-to-b from-blue-50 to-gray-100"
+        aria-label={`Interactive ${stadiumName} seating map`}
+        role="application"
+      >
         {/* View preview overlay */}
         {viewPreview && (
-          <div className="absolute inset-0 z-30 bg-black/70 flex items-center justify-center p-6">
+          <div 
+            className="absolute inset-0 z-30 bg-black/70 flex items-center justify-center p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="view-preview-title"
+          >
             <div className="bg-white rounded-lg max-w-lg p-4 relative">
               <button 
                 className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
                 onClick={() => setViewPreview(null)}
+                aria-label="Close view preview"
               >
                 ✕
               </button>
-              <h3 className="font-bold mb-2">View from {viewPreview.section_id}</h3>
+              <h3 id="view-preview-title" className="font-bold mb-2">View from {viewPreview.section_id}</h3>
               <img 
                 src={viewPreview.image_url} 
-                alt={`View from ${viewPreview.section_id}`} 
+                alt={`View from ${viewPreview.section_id} section`} 
                 className="w-full rounded-md mb-2"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = 'https://placehold.co/600x400/007ACC/FFF?text=View+Not+Available';
+                }}
               />
               <p className="text-sm text-gray-600">{viewPreview.description}</p>
             </div>
@@ -280,11 +393,13 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
               className={cn(
                 "w-80 h-48 bg-gradient-to-b from-green-400 to-green-600 rounded-[50%]",
                 "border-4 border-white flex items-center justify-center",
-                "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"
+                "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10",
+                isMobile ? "scale-75" : ""
               )}
               style={{
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
               }}
+              aria-label="Stadium field"
             >
               {/* Field markings */}
               <div className="w-60 h-32 border-2 border-white rounded-[50%] flex items-center justify-center">
@@ -296,18 +411,20 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
             <div 
               className={cn(
                 "w-[600px] h-[400px] relative",
-                viewingMode === '3d' ? 'transform-gpu rotateX(25deg)' : ''
+                viewingMode === '3d' ? 'transform-gpu rotateX(25deg)' : '',
+                isMobile ? "scale-75" : ""
               )}
               style={{
                 transformOrigin: 'center center'
               }}
+              aria-label="Stadium sections"
             >
               {/* Render each section */}
-              {sections.map((section, sectionIndex) => {
+              {validSections.map((section, sectionIndex) => {
                 // Calculate position around the stadium
-                const numSections = sections.length;
+                const numSections = validSections.length;
                 const angle = (sectionIndex * (360 / numSections) + rotation) % 360;
-                const radius = 200; // Distance from center
+                const radius = isMobile ? 180 : 200; // Distance from center, smaller on mobile
                 
                 // Calculate position using trigonometry
                 const x = Math.cos((angle * Math.PI) / 180) * radius;
@@ -332,9 +449,9 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                       left: `calc(50% + ${x}px)`,
                       top: `calc(50% + ${y}px)`,
                       opacity,
-                      backgroundColor: section.color_code,
-                      width: isActive ? '180px' : '120px',
-                      height: isActive ? '120px' : '80px',
+                      backgroundColor: section.color_code || '#2563EB',
+                      width: isActive ? (isMobile ? '160px' : '180px') : (isMobile ? '100px' : '120px'),
+                      height: isActive ? (isMobile ? '100px' : '120px') : (isMobile ? '70px' : '80px'),
                       borderRadius: '8px',
                       boxShadow: isActive ? '0 8px 30px rgba(0, 0, 0, 0.2)' : '0 4px 6px rgba(0, 0, 0, 0.1)',
                       border: section.is_vip ? '2px solid gold' : '1px solid rgba(255,255,255,0.2)'
@@ -342,6 +459,17 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                     initial={{ scale: 1 }}
                     whileHover={{ scale: 1.05 }}
                     onClick={() => handleSectionClick(section.section_id)}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`${section.name} section, price ₹${section.price.toLocaleString()}, ${section.availability} seats available`}
+                    aria-expanded={isActive}
+                    aria-pressed={false}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSectionClick(section.section_id);
+                      }
+                    }}
                   >
                     {/* Section header */}
                     <div className="absolute top-0 left-0 right-0 bg-black/30 p-1 text-white text-center rounded-t-lg flex justify-between items-center">
@@ -354,8 +482,9 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                             const view = findSeatView(section.section_id);
                             if (view) setViewPreview(view);
                           }}
+                          aria-label={`View from ${section.name} section`}
                         >
-                          <Eye className="h-3 w-3" />
+                          <Eye className="h-3 w-3" aria-hidden="true" />
                         </button>
                       )}
                     </div>
@@ -369,19 +498,34 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                     </div>
 
                     {/* Render individual seats when section is active */}
-                    {isActive && (
+                    {isActive && section.seats && section.seats.length > 0 && (
                       <div className="absolute inset-4 flex flex-col items-center justify-center overflow-y-auto">
                         <div 
                           className="grid gap-1"
                           style={{ 
-                            gridTemplateColumns: `repeat(${Math.min(10, section.seats_per_row)}, minmax(0, 1fr))` 
+                            gridTemplateColumns: `repeat(${Math.min(isMobile ? 8 : 10, section.seats_per_row || 10)}, minmax(0, 1fr))` 
                           }}
+                          role="grid"
+                          aria-label={`${section.name} section seats`}
                         >
                           {section.seats.map((seat, idx) => {
                             // Skip seats if we're showing best deals and this isn't one
                             if (showBestDeals && !seat.rating && seat.status === 'available') {
                               return null;
                             }
+                            
+                            if (!seat || !seat.id) {
+                              return (
+                                <div 
+                                  key={`empty-${idx}`}
+                                  className="w-4 h-4 rounded-sm bg-gray-200 opacity-20"
+                                  aria-hidden="true"
+                                />
+                              );
+                            }
+                            
+                            const isDisabled = seat.status === 'unavailable' || seat.status === 'reserved';
+                            const isSelected = seat.status === 'selected';
                             
                             return (
                               <TooltipProvider key={seat.id}>
@@ -392,14 +536,20 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                                         "w-4 h-4 rounded-sm transition-colors",
                                         getSeatColor(seat)
                                       )}
-                                      disabled={seat.status === 'unavailable' || seat.status === 'reserved'}
+                                      disabled={isDisabled}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSeatClick(section, seat);
                                       }}
+                                      onKeyDown={(e) => handleKeyDown(e, section, seat)}
+                                      aria-label={`Row ${seat.row}, Seat ${seat.number}, Price ₹${seat.price.toLocaleString()}, ${seat.status}`}
+                                      aria-selected={isSelected}
+                                      aria-disabled={isDisabled}
+                                      role="gridcell"
+                                      tabIndex={-1}
                                     >
-                                      {seat.rating === 'hot' && <span className="text-[6px]">⚡</span>}
-                                      {seat.rating === 'best_value' && <span className="text-[6px]">💰</span>}
+                                      {seat.rating === 'hot' && <span className="text-[6px]" aria-hidden="true">⚡</span>}
+                                      {seat.rating === 'best_value' && <span className="text-[6px]" aria-hidden="true">💰</span>}
                                     </button>
                                   </TooltipTrigger>
                                   <TooltipContent className="whitespace-pre-line">
@@ -409,6 +559,16 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                               </TooltipProvider>
                             );
                           })}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Show empty state when section is active but has no seats */}
+                    {isActive && (!section.seats || section.seats.length === 0) && (
+                      <div className="absolute inset-4 flex items-center justify-center">
+                        <div className="text-center text-white text-xs">
+                          <AlertCircle className="h-4 w-4 mx-auto mb-1" aria-hidden="true" />
+                          <p>No seat data</p>
                         </div>
                       </div>
                     )}
@@ -425,19 +585,19 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
         <Card className="bg-green-50 border-green-200">
           <CardContent className="pt-4">
             <div className="flex items-center mb-3">
-              <ThumbsUp className="h-5 w-5 text-green-600 mr-2" />
+              <ThumbsUp className="h-5 w-5 text-green-600 mr-2" aria-hidden="true" />
               <h3 className="font-medium">Recommended Seats</h3>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {sections.flatMap(section => 
-                section.seats
-                  .filter(seat => seat.rating && seat.status === 'available')
+              {validSections.flatMap(section => 
+                (section.seats || [])
+                  .filter(seat => seat && seat.rating && seat.status === 'available')
                   .slice(0, 2)
                   .map(seat => (
                     <div 
                       key={seat.id} 
-                      className="bg-white p-3 rounded-lg border border-green-200 flex justify-between"
+                      className="bg-white p-3 rounded-lg border border-green-200 flex justify-between shadow-sm hover:shadow-md transition-shadow"
                     >
                       <div>
                         <div className="font-medium">{section.name}</div>
@@ -469,6 +629,14 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
                     </div>
                   ))
               )}
+              
+              {validSections.flatMap(section => 
+                (section.seats || []).filter(seat => seat && seat.rating && seat.status === 'available')
+              ).length === 0 && (
+                <div className="col-span-3 text-center p-4 bg-white rounded-lg border border-green-200">
+                  <p className="text-gray-500">No recommended seats currently available</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -478,7 +646,7 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
       {totalSeats > 0 && (
         <Card className="bg-white border shadow-sm">
           <CardContent className="p-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-4">
               <div>
                 <div className="text-sm text-gray-500">Selected: {totalSeats} seats</div>
                 <div className="text-xl font-bold">Total: ₹{totalAmount.toLocaleString()}</div>
@@ -493,7 +661,7 @@ const PremiumStadiumView: React.FC<PremiumStadiumViewProps> = ({
       
       {/* Accessibility info */}
       <div className="flex items-start p-3 border border-blue-200 bg-blue-50 rounded-lg text-sm">
-        <AlertCircle className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+        <AlertCircle className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" aria-hidden="true" />
         <div>
           <p className="font-medium text-blue-800">Accessibility Information</p>
           <p className="text-blue-700 mt-1">

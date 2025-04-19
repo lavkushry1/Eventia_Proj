@@ -26,6 +26,26 @@ db = client.get_default_database()
 sync_client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
 sync_db = sync_client.get_default_database()
 
+# Explicit async function to get database for async operations
+async def get_db():
+    """
+    Get async MongoDB database instance.
+    
+    Returns:
+        AsyncIOMotorDatabase: AsyncIO Motor database instance
+    """
+    return db
+
+# Explicit sync function to get database for sync operations (admin panel)
+def get_sync_db():
+    """
+    Get synchronous MongoDB database instance.
+    
+    Returns:
+        pymongo.database.Database: Synchronous MongoDB database instance
+    """
+    return sync_db
+
 def create_indexes() -> None:
     """
     Create MongoDB indexes for better query performance.

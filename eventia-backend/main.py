@@ -21,7 +21,7 @@ from pathlib import Path
 
 # Import core modules
 from .core.config import settings, logger
-from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings
+from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings, client
 from .middleware.security import SecurityHeadersMiddleware
 from .middleware.rate_limiter import RateLimiter
 
@@ -43,7 +43,8 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "x-correlation-id"],
+    expose_headers=["x-correlation-id", "X-Process-Time", "X-Request-ID"]
 )
 
 # Add security headers middleware
@@ -159,8 +160,18 @@ app.include_router(bookings.router, prefix=api_prefix)
 # Health check endpoint
 @app.get(f"{api_prefix}/health", tags=["system"])
 async def health_check():
-    """Health check endpoint to verify the API is running."""
-    return {"status": "ok", "version": settings.PROJECT_VERSION}
+    """Health check endpoint to verify the API is running and connected to the database."""
+    try:
+        # Check MongoDB connection
+        await client.admin.command("ping")
+        return {
+            "status": "ok", 
+            "db": "connected",
+            "version": settings.PROJECT_VERSION
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(500, f"Database error: {str(e)}")
 
 # Custom Swagger UI with authentication
 @app.get("/docs", include_in_schema=False)

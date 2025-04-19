@@ -5,7 +5,7 @@
  * @Last Modified time: 2025-04-18 18:01:29
  */
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import configManager, { config } from '../config';
+import configManager from '../config';
 import { v4 as uuidv4 } from 'uuid';
 import {
   EventResponse,
@@ -61,10 +61,11 @@ declare module 'axios' {
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: config().API_BASE_URL,
+  baseURL: configManager.config().API_BASE_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'x-correlation-id': uuidv4(), // Add proper correlation ID
   },
 });
 
@@ -132,18 +133,23 @@ export function perfMark(name: string): void {
   }
 }
 
+// Utility to generate correlation IDs
+const generateUUID = (): string => {
+  return uuidv4();
+};
+
 // Add request interceptor for logging and performance tracking
 api.interceptors.request.use(
   (config) => {
     // Generate a correlation ID for request tracing
-    const correlationId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    config.headers['X-Correlation-ID'] = correlationId;
+    const correlationId = generateUUID();
+    config.headers['x-correlation-id'] = correlationId;
     
     // Mark request start for performance tracking
     perfMark(`req-start-${config.url}`);
     
     // Log the request in development
-    if (configManager.isDevelopment()) {
+    if (import.meta.env.MODE === 'development') {
       console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
         headers: config.headers,
         data: config.data,
@@ -176,10 +182,10 @@ api.interceptors.response.use(
         const duration = measure ? measure.duration : 0;
         
         // Log in development
-        if (configManager.isDevelopment()) {
+        if (import.meta.env.MODE === 'development') {
           console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status} (${duration.toFixed(2)}ms)`, {
             data: response.data,
-            correlationId: response.config.headers['X-Correlation-ID'],
+            correlationId: response.config.headers['x-correlation-id'],
           });
         }
       }
@@ -197,12 +203,12 @@ api.interceptors.response.use(
         data: error.response.data,
         url: error.config?.url,
         method: error.config?.method,
-        correlationId: error.config?.headers?.['X-Correlation-ID'],
+        correlationId: error.config?.headers?.['x-correlation-id'],
       });
       
       // Store correlation ID for error tracking
-      if (error.config?.headers?.['X-Correlation-ID']) {
-        sessionStorage.setItem('x-correlation-id', error.config.headers['X-Correlation-ID']);
+      if (error.config?.headers?.['x-correlation-id']) {
+        sessionStorage.setItem('x-correlation-id', error.config.headers['x-correlation-id']);
       }
       
       // Handle 401 unauthorized globally
@@ -216,15 +222,44 @@ api.interceptors.response.use(
           // Redirect to login with return URL
           window.location.href = `/admin-login?returnUrl=${encodeURIComponent(window.location.pathname)}`;
           
-          // Show message
-          const toast = window.toast;
-          if (typeof toast === 'function') {
-            toast({
-              title: "Session Expired",
-              description: "Your session has expired. Please login again.",
-              variant: "destructive"
-            });
+          // Show message using toast if available
+          try {
+            // @ts-ignore Access to toast function
+            if (typeof window.toast === 'function') {
+              // @ts-ignore
+              window.toast({
+                title: "Session Expired",
+                description: "Your session has expired. Please login again.",
+                variant: "destructive"
+              });
+            }
+          } catch (e) {
+            console.error('Toast notification failed', e);
           }
+        }
+      }
+      
+      // Handle 403 Forbidden - redirect to login
+      if (error.response.status === 403) {
+        console.warn('Access forbidden');
+        if (!window.location.pathname.includes('/login')) {
+          // Show message using toast if available
+          try {
+            // @ts-ignore Access to toast function
+            if (typeof window.toast === 'function') {
+              // @ts-ignore
+              window.toast({
+                title: "Access Denied",
+                description: "You don't have permission to access this resource.",
+                variant: "destructive"
+              });
+            }
+          } catch (e) {
+            console.error('Toast notification failed', e);
+          }
+          
+          // Redirect to login page
+          window.location.href = '/login';
         }
       }
       
@@ -237,7 +272,7 @@ api.interceptors.response.use(
         request: error.request,
         url: error.config?.url,
         method: error.config?.method,
-        correlationId: error.config?.headers?.['X-Correlation-ID'],
+        correlationId: error.config?.headers?.['x-correlation-id'],
       });
       
       // Check if network error
@@ -248,7 +283,6 @@ api.interceptors.response.use(
       }
     } else {
       console.error('API Error:', error.message);
-      error.message = "An unexpected error occurred while communicating with the server.";
     }
     
     return Promise.reject(error);
@@ -422,11 +456,11 @@ export async function fetchPaymentSettings(): Promise<ApiPaymentSettings> {
     console.error('Error fetching payment settings:', error);
     // Return default settings if the API fails
     return {
-      merchant_name: config().MERCHANT_NAME,
-      vpa: config().VPA_ADDRESS,
-      vpaAddress: config().VPA_ADDRESS,
-      isPaymentEnabled: config().PAYMENT_ENABLED,
-      qrImageUrl: config().QR_IMAGE_URL,
+      merchant_name: configManager.config().MERCHANT_NAME,
+      vpa: configManager.config().PAYMENT_VPA,
+      vpaAddress: configManager.config().PAYMENT_VPA,
+      isPaymentEnabled: configManager.config().PAYMENT_ENABLED,
+      qrImageUrl: configManager.config().QR_IMAGE_URL,
       payment_mode: 'vpa',
       description: 'Default payment settings',
       updated_at: new Date().toISOString(),
@@ -612,7 +646,7 @@ export async function fetchAppConfig() {
   try {
     // Initialize the configuration
     await configManager.init();
-    const appConfig = config();
+    const appConfig = configManager.config();
     
     // Update API baseURL with the latest config
     api.defaults.baseURL = appConfig.API_BASE_URL;
@@ -648,4 +682,19 @@ export const uploadImage = async (endpoint: string, formData: FormData) => {
   }
   
   return response.json();
+};
+
+// Initialize the API service
+const init = async (): Promise<boolean> => {
+  try {
+    // Set up API state based on environment
+    if (import.meta.env.MODE === 'development') {
+      console.log('API initialized in development mode');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize API service', error);
+    return false;
+  }
 };

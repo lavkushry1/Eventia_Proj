@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -6,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
@@ -86,6 +86,9 @@ const BookingModal = ({ isOpen, onClose, eventTitle, ticketTypes }: BookingModal
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Book Tickets for {eventTitle}</DialogTitle>
+          <DialogDescription>
+            Select the number of tickets for each category.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4">

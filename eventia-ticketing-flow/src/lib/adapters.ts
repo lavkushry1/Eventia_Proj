@@ -191,18 +191,39 @@ export function mapUIBookingToApiBooking(
     email: string;
     phone: string;
     address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
   },
-  discountCode?: string
+  discountCode?: string,
+  ticketTypeId?: string
 ) {
+  // Create a selected_tickets array with a single item when no specific ticket types
+  // are provided (backward compatibility)
+  const selected_tickets = ticketTypeId 
+    ? [{ 
+        ticket_type_id: ticketTypeId,
+        quantity: quantity,
+        price_per_ticket: 0 // Price will be determined on the server side
+      }] 
+    : [{ 
+        ticket_type_id: "default", // Use default when no specific ticket type is provided
+        quantity: quantity,
+        price_per_ticket: 0 // Price will be determined on the server side
+      }];
+
   return {
     event_id: eventId,
-    quantity,
     customer_info: {
       name: customerInfo.name,
       email: customerInfo.email,
       phone: customerInfo.phone,
-      address: customerInfo.address || ""
+      address: customerInfo.address || "",
+      city: customerInfo.city || "",
+      state: customerInfo.state || "",
+      pincode: customerInfo.pincode || ""
     },
+    selected_tickets,
     discount_code: discountCode || undefined
   };
 }
