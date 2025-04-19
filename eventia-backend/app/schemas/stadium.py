@@ -1,37 +1,25 @@
 """
 Stadium schemas
 --------------
-Pydantic schemas for stadium API requests and responses
+Pydantic schemas for Stadium API requests and responses
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
-import re
+from pydantic import BaseModel, Field, HttpUrl
+
+from .base import PaginatedResponse, ApiResponse
 
 
+# Schemas to match frontend TypeScript interfaces
 class SectionBase(BaseModel):
-    """Base model for stadium section"""
+    """Base Section schema with common fields"""
     name: str = Field(..., description="Section name")
-    capacity: int = Field(..., ge=1, description="Total capacity")
-    price: float = Field(..., ge=0, description="Ticket price")
-    available: int = Field(..., ge=0, description="Available seats")
-    color: Optional[str] = Field(None, description="Section color for visualization")
+    capacity: int = Field(..., description="Section capacity")
+    price: float = Field(..., description="Price per seat in this section")
+    available: int = Field(..., description="Number of available seats")
+    color: Optional[str] = Field(None, description="Color code for the section map")
     view_image_url: Optional[str] = Field(None, description="URL to section view image")
-    coordinates: Optional[Dict[str, Any]] = Field(None, description="Section coordinates for mapping")
-    
-    @validator('available')
-    def available_must_not_exceed_capacity(cls, v, values):
-        if 'capacity' in values and v > values['capacity']:
-            raise ValueError('Available seats cannot exceed capacity')
-        return v
-    
-    @validator('color')
-    def validate_color(cls, v):
-        """Validate color format"""
-        if v is not None and not re.match(r'^#[0-9A-Fa-f]{6}$', v):
-            raise ValueError('Color must be a valid hex color code (e.g., #FF5733)')
-        return v
 
 
 class SectionCreate(SectionBase):
@@ -42,53 +30,35 @@ class SectionCreate(SectionBase):
 class SectionUpdate(BaseModel):
     """Schema for updating a section"""
     name: Optional[str] = None
-    capacity: Optional[int] = Field(None, ge=1, description="Total capacity")
-    price: Optional[float] = Field(None, ge=0, description="Ticket price")
-    available: Optional[int] = Field(None, ge=0, description="Available seats")
+    capacity: Optional[int] = None
+    price: Optional[float] = None
+    available: Optional[int] = None
     color: Optional[str] = None
     view_image_url: Optional[str] = None
-    coordinates: Optional[Dict[str, Any]] = None
-    
-    @validator('available')
-    def available_must_not_exceed_capacity(cls, v, values):
-        if v is not None and 'capacity' in values and values['capacity'] is not None and v > values['capacity']:
-            raise ValueError('Available seats cannot exceed capacity')
-        return v
-    
-    @validator('color')
-    def validate_color(cls, v):
-        """Validate color format"""
-        if v is not None and not re.match(r'^#[0-9A-Fa-f]{6}$', v):
-            raise ValueError('Color must be a valid hex color code (e.g., #FF5733)')
-        return v
 
 
-class SectionResponse(SectionBase):
-    """Response schema for section"""
-    id: str = Field(..., description="Section ID")
+class SectionInDB(SectionBase):
+    """Schema for section as stored in the database"""
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
 
 
 class StadiumBase(BaseModel):
-    """Base model for stadium operations"""
+    """Base Stadium schema with common fields"""
     name: str = Field(..., description="Stadium name")
-    code: str = Field(..., description="Stadium code")
+    code: str = Field(..., description="Stadium short code")
     location: str = Field(..., description="Stadium location")
-    capacity: int = Field(..., ge=1, description="Total capacity")
-    image_url: Optional[str] = Field(None, description="URL to stadium image")
-    map_url: Optional[str] = Field(None, description="URL to stadium map image")
-    facilities: Optional[List[str]] = Field(default_factory=list, description="Available facilities")
-    
-    @validator('code')
-    def validate_code(cls, v):
-        """Validate stadium code format"""
-        if not re.match(r'^[A-Z0-9]{3,10}$', v):
-            raise ValueError('Stadium code must be 3-10 uppercase letters or numbers')
-        return v
+    capacity: int = Field(..., description="Total stadium capacity")
 
 
 class StadiumCreate(StadiumBase):
     """Schema for creating a new stadium"""
-    sections: Optional[List[SectionCreate]] = Field(default_factory=list, description="Stadium sections")
+    image_url: Optional[str] = Field(None, description="URL to stadium image")
+    sections: List[SectionCreate] = Field(default_factory=list, description="List of stadium sections")
 
 
 class StadiumUpdate(BaseModel):
@@ -96,57 +66,40 @@ class StadiumUpdate(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
     location: Optional[str] = None
-    capacity: Optional[int] = Field(None, ge=1)
+    capacity: Optional[int] = None
     image_url: Optional[str] = None
-    map_url: Optional[str] = None
-    facilities: Optional[List[str]] = None
-    
-    @validator('code')
-    def validate_code(cls, v):
-        """Validate stadium code format if provided"""
-        if v is not None and not re.match(r'^[A-Z0-9]{3,10}$', v):
-            raise ValueError('Stadium code must be 3-10 uppercase letters or numbers')
-        return v
+    # Note: Sections are updated via separate endpoints
 
 
-class StadiumResponse(BaseModel):
-    """Response model for single stadium operations"""
-    data: Dict[str, Any] = Field(..., description="Stadium data")
-    message: str = Field(..., description="Response message")
+class StadiumInDB(StadiumBase):
+    """Schema for stadium as stored in the database"""
+    id: str
+    image_url: Optional[str] = None
+    sections: List[SectionInDB] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+# Response schemas to match frontend expectations
+class StadiumListResponse(PaginatedResponse):
+    """Schema for paginated list of stadiums"""
+    items: List[StadiumInDB]
+
+
+class StadiumResponse(ApiResponse):
+    """Schema for a single stadium response"""
+    data: StadiumInDB
 
 
 class StadiumSearchParams(BaseModel):
-    """Search parameters for stadiums"""
-    page: int = Field(1, ge=1, description="Page number (1-indexed)")
-    limit: int = Field(10, ge=1, le=100, description="Number of items per page")
-    search: Optional[str] = Field(None, description="Search term for stadium name or location")
-    sort: Optional[str] = Field("name", description="Field to sort by")
-    order: Optional[str] = Field("asc", description="Sort order (asc or desc)")
-
-
-class StadiumListResponse(BaseModel):
-    """Response model for stadium listing"""
-    items: List[Dict[str, Any]] = Field(..., description="List of stadiums")
-    total: int = Field(..., description="Total number of stadiums")
-    page: int = Field(..., description="Current page number")
-    limit: int = Field(..., description="Number of items per page")
-    total_pages: int = Field(..., description="Total number of pages")
-
-
-class SectionSearchParams(BaseModel):
-    """Search parameters for stadium sections"""
-    stadium_id: str = Field(..., description="Stadium ID")
-    available_only: Optional[bool] = Field(False, description="Filter for sections with available seats only")
-    min_price: Optional[float] = Field(None, ge=0, description="Minimum price")
-    max_price: Optional[float] = Field(None, ge=0, description="Maximum price")
-    sort: Optional[str] = Field("price", description="Field to sort by")
-    order: Optional[str] = Field("asc", description="Sort order (asc or desc)")
-
-
-class AvailabilityParams(BaseModel):
-    """Parameters for checking seat availability"""
-    stadium_id: str = Field(..., description="Stadium ID")
-    event_id: str = Field(..., description="Event ID")
-    section_id: Optional[str] = Field(None, description="Section ID (optional)")
+    """Schema for stadium search parameters"""
+    page: Optional[int] = 1
+    limit: Optional[int] = 10
+    search: Optional[str] = None
+    sort: Optional[str] = "name"
+    order: Optional[str] = "asc"
 
 

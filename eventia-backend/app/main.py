@@ -15,7 +15,7 @@ from .db.mongodb import connect_to_mongo, close_mongo_connection
 from .middleware.security import SecurityHeadersMiddleware, RateLimiter
 
 # Import routers
-from .routers import auth, events, bookings, stadiums, admin_payment
+from .routers import auth, events, bookings, stadiums, admin_payment, payments, seats
 
 # Create FastAPI app
 app = FastAPI(
@@ -52,18 +52,18 @@ app.add_middleware(
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
-    
+
     # Add request ID
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
-    
+
     # Process request
     try:
         response = await call_next(request)
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         response.headers["X-Request-ID"] = request_id
-        
+
         # Log request
         logger.info(
             f"Request: {request.method} {request.url.path} - "
@@ -71,7 +71,7 @@ async def add_process_time_header(request: Request, call_next):
             f"Time: {process_time:.4f}s - "
             f"ID: {request_id}"
         )
-        
+
         return response
     except Exception as e:
         process_time = time.time() - start_time
@@ -81,7 +81,7 @@ async def add_process_time_header(request: Request, call_next):
             f"Time: {process_time:.4f}s - "
             f"ID: {request_id}"
         )
-        
+
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Internal server error"}
@@ -135,6 +135,8 @@ app.include_router(events.router, prefix=api_prefix)
 app.include_router(bookings.router, prefix=api_prefix)
 app.include_router(stadiums.router, prefix=api_prefix)
 app.include_router(admin_payment.router, prefix=api_prefix)
+app.include_router(payments.router, prefix=api_prefix)
+app.include_router(seats.router, prefix=api_prefix)
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])

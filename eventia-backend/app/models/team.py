@@ -35,12 +35,10 @@ class TeamModel(MongoBaseModel):
     
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     name: str = Field(..., description="Team name")
-    code: str = Field(..., description="Team code (e.g., CSK, MI)")
-    description: Optional[str] = Field(None, description="Team description")
-    logo_url: Optional[str] = Field(None, description="URL to team logo")
-    primary_color: Optional[str] = Field(None, description="Primary team color (hex)")
-    secondary_color: Optional[str] = Field(None, description="Secondary team color (hex)")
-    players: List[PlayerModel] = Field(default_factory=list, description="Team players")
+    code: str = Field(..., description="Team short code")
+    logo_url: Optional[str] = Field(None, description="URL to team logo image")
+    primary_color: Optional[str] = Field(None, description="Primary team color in hex format")
+    secondary_color: Optional[str] = Field(None, description="Secondary team color in hex format")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -53,11 +51,9 @@ class TeamModel(MongoBaseModel):
             "example": {
                 "name": "Chennai Super Kings",
                 "code": "CSK",
-                "description": "Chennai Super Kings IPL Team",
                 "logo_url": "/static/teams/csk_logo.png",
                 "primary_color": "#FFFF00",
-                "secondary_color": "#0080FF",
-                "players": []
+                "secondary_color": "#0080FF"
             }
         }
     
@@ -65,7 +61,6 @@ class TeamModel(MongoBaseModel):
     @classmethod
     def get_indexes(cls):
         return [
-            [("name", 1)],         # Simple index on name
-            [("code", 1), {"unique": True}],  # Unique index on code
-            [("created_at", -1)],  # Index on created_at (descending)
+            [("code", 1)],  # Simple index on code
+            [("name", 1)],  # Simple index on name
         ]

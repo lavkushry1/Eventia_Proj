@@ -1,18 +1,17 @@
 """
-Team routes
-----------
-API endpoints for team operations
+Teams router
+-----------
+API endpoints for teams
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, File, UploadFile, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, File, UploadFile
 from pydantic import ValidationError
 
 from ..schemas.team import (
-    TeamCreate,
-    TeamUpdate,
-    TeamResponse,
+    TeamCreate, 
+    TeamUpdate, 
+    TeamResponse, 
     TeamListResponse,
     TeamSearchParams
 )
@@ -37,9 +36,9 @@ router = APIRouter(
     description="Get a list of teams with optional filtering and pagination"
 )
 async def get_teams(
-    search: Optional[str] = Query(None, description="Search by name or code"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search in name and code"),
     sort: Optional[str] = Query("name", description="Field to sort by"),
     order: Optional[str] = Query("asc", description="Sort order (asc or desc)")
 ):
@@ -49,9 +48,9 @@ async def get_teams(
     try:
         # Create search params
         params = TeamSearchParams(
-            search=search,
             page=page,
             limit=limit,
+            search=search,
             sort=sort,
             order=order
         )

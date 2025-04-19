@@ -1,11 +1,12 @@
 """
-Stadiums router
--------------
-API endpoints for stadiums with section management
+Stadium routes
+------------
+API endpoints for stadium operations
 """
 
-from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, UploadFile, File
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..schemas.stadium import (
@@ -14,12 +15,16 @@ from ..schemas.stadium import (
     StadiumResponse,
     StadiumListResponse,
     StadiumSearchParams,
-    StadiumSectionCreate,
-    StadiumSectionUpdate
+    SectionCreate,
+    SectionUpdate,
+    SectionSearchParams,
+    AvailabilityParams
 )
 from ..controllers.stadium_controller import StadiumController
 from ..middleware.auth import get_current_user, get_admin_user
 from ..utils.logger import logger
+from ..utils.file import save_upload_file
+from ..config import settings
 
 # Create router
 router = APIRouter(
@@ -36,9 +41,9 @@ router = APIRouter(
     description="Get a list of stadiums with optional filtering and pagination"
 )
 async def get_stadiums(
+    search: Optional[str] = Query(None, description="Search by name or location"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    search: Optional[str] = Query(None, description="Search in name, code and location"),
     sort: Optional[str] = Query("name", description="Field to sort by"),
     order: Optional[str] = Query("asc", description="Sort order (asc or desc)")
 ):
@@ -48,9 +53,9 @@ async def get_stadiums(
     try:
         # Create search params
         params = StadiumSearchParams(
+            search=search,
             page=page,
             limit=limit,
-            search=search,
             sort=sort,
             order=order
         )
@@ -108,20 +113,20 @@ async def get_stadium(
 
 
 @router.get(
-    "/code/{stadium_code}",
+    "/code/{code}",
     response_model=StadiumResponse,
     summary="Get stadium by code",
-    description="Get a single stadium by its code (e.g., CHEPAUK, WANKHEDE)"
+    description="Get a single stadium by its code"
 )
 async def get_stadium_by_code(
-    stadium_code: str = Path(..., description="Stadium code")
+    code: str = Path(..., description="Stadium code")
 ):
     """
     Get a single stadium by its code
     """
     try:
         # Get stadium from controller
-        stadium = await StadiumController.get_stadium_by_code(stadium_code)
+        stadium = await StadiumController.get_stadium_by_code(code)
         
         # Return response
         return {
@@ -179,6 +184,140 @@ async def create_stadium(
         )
 
 
+@router.post(
+    "/{stadium_id}/image",
+    response_model=StadiumResponse,
+    summary="Upload stadium image",
+    description="Upload an image for a stadium (admin only)",
+    dependencies=[Depends(get_admin_user)]
+)
+async def upload_stadium_image(
+    stadium_id: str = Path(..., description="Stadium ID"),
+    file: UploadFile = File(..., description="Stadium image file")
+):
+    """
+    Upload an image for a stadium (admin only)
+    """
+    try:
+        # Validate stadium ID
+        if not stadium_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stadium ID is required"
+            )
+        
+        # Get stadium to verify it exists
+        stadium = await StadiumController.get_stadium(stadium_id)
+        
+        # Check file extension
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+        file_ext = '.' + file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File extension not allowed. Allowed extensions: {', '.join(allowed_extensions)}"
+            )
+        
+        # Generate filename and path
+        filename = f"{stadium['code'].lower()}_stadium{file_ext}"
+        filepath = settings.STATIC_STADIUMS_PATH / filename
+        
+        # Save file
+        async with open(filepath, 'wb') as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Update stadium with new image URL
+        image_url = f"{settings.STATIC_URL}/stadiums/{filename}"
+        update_data = StadiumUpdate(image_url=image_url)
+        
+        # Update stadium
+        updated_stadium = await StadiumController.update_stadium(stadium_id, update_data)
+        
+        # Return response
+        return {
+            "data": updated_stadium,
+            "message": "Stadium image uploaded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload_stadium_image: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload stadium image: {str(e)}"
+        )
+
+
+@router.post(
+    "/{stadium_id}/map",
+    response_model=StadiumResponse,
+    summary="Upload stadium map",
+    description="Upload a map image for a stadium (admin only)",
+    dependencies=[Depends(get_admin_user)]
+)
+async def upload_stadium_map(
+    stadium_id: str = Path(..., description="Stadium ID"),
+    file: UploadFile = File(..., description="Stadium map image file")
+):
+    """
+    Upload a map image for a stadium (admin only)
+    """
+    try:
+        # Validate stadium ID
+        if not stadium_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stadium ID is required"
+            )
+        
+        # Get stadium to verify it exists
+        stadium = await StadiumController.get_stadium(stadium_id)
+        
+        # Check file extension
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+        file_ext = '.' + file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File extension not allowed. Allowed extensions: {', '.join(allowed_extensions)}"
+            )
+        
+        # Generate filename and path
+        filename = f"{stadium['code'].lower()}_map{file_ext}"
+        filepath = settings.STATIC_STADIUMS_PATH / filename
+        
+        # Save file
+        async with open(filepath, 'wb') as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Update stadium with new map URL
+        map_url = f"{settings.STATIC_URL}/stadiums/{filename}"
+        update_data = StadiumUpdate(map_url=map_url)
+        
+        # Update stadium
+        updated_stadium = await StadiumController.update_stadium(stadium_id, update_data)
+        
+        # Return response
+        return {
+            "data": updated_stadium,
+            "message": "Stadium map uploaded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload_stadium_map: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload stadium map: {str(e)}"
+        )
+
+
 @router.put(
     "/{stadium_id}",
     response_model=StadiumResponse,
@@ -221,6 +360,7 @@ async def update_stadium(
 
 @router.delete(
     "/{stadium_id}",
+    response_model=dict,
     summary="Delete stadium",
     description="Delete a stadium (admin only)",
     dependencies=[Depends(get_admin_user)]
@@ -248,41 +388,8 @@ async def delete_stadium(
         )
 
 
-@router.post(
-    "/{stadium_id}/image",
-    response_model=StadiumResponse,
-    summary="Upload stadium image",
-    description="Upload image for a stadium (admin only)",
-    dependencies=[Depends(get_admin_user)]
-)
-async def upload_stadium_image(
-    stadium_id: str = Path(..., description="Stadium ID"),
-    file: UploadFile = File(..., description="Stadium image file")
-):
-    """
-    Upload image for a stadium (admin only)
-    """
-    try:
-        # Upload image using controller
-        updated_stadium = await StadiumController.upload_stadium_image(stadium_id, file)
-        
-        # Return response
-        return {
-            "data": updated_stadium,
-            "message": "Stadium image uploaded successfully"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in upload_stadium_image: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload stadium image: {str(e)}"
-        )
+# Section Management Endpoints
 
-
-# Section management endpoints
 @router.post(
     "/{stadium_id}/sections",
     response_model=StadiumResponse,
@@ -292,14 +399,14 @@ async def upload_stadium_image(
 )
 async def add_section(
     stadium_id: str = Path(..., description="Stadium ID"),
-    section: StadiumSectionCreate = None
+    section_data: SectionCreate = None
 ):
     """
     Add a new section to a stadium (admin only)
     """
     try:
         # Add section using controller
-        updated_stadium = await StadiumController.add_section(stadium_id, section)
+        updated_stadium = await StadiumController.add_section(stadium_id, section_data)
         
         # Return response
         return {
@@ -323,6 +430,82 @@ async def add_section(
         )
 
 
+@router.post(
+    "/{stadium_id}/sections/{section_id}/image",
+    response_model=StadiumResponse,
+    summary="Upload section view image",
+    description="Upload a view image for a stadium section (admin only)",
+    dependencies=[Depends(get_admin_user)]
+)
+async def upload_section_image(
+    stadium_id: str = Path(..., description="Stadium ID"),
+    section_id: str = Path(..., description="Section ID"),
+    file: UploadFile = File(..., description="Section view image file")
+):
+    """
+    Upload a view image for a stadium section (admin only)
+    """
+    try:
+        # Get stadium to verify it exists
+        stadium = await StadiumController.get_stadium(stadium_id)
+        
+        # Verify section exists in this stadium
+        section_exists = False
+        section_name = ""
+        for section in stadium["sections"]:
+            if section["id"] == section_id:
+                section_exists = True
+                section_name = section["name"]
+                break
+        
+        if not section_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section with ID {section_id} not found in stadium with ID {stadium_id}"
+            )
+        
+        # Check file extension
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+        file_ext = '.' + file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File extension not allowed. Allowed extensions: {', '.join(allowed_extensions)}"
+            )
+        
+        # Generate filename and path
+        filename = f"{stadium['code'].lower()}_{section_name.lower().replace(' ', '_')}_view{file_ext}"
+        filepath = settings.STATIC_STADIUMS_PATH / filename
+        
+        # Save file
+        async with open(filepath, 'wb') as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Update section with new image URL
+        view_image_url = f"{settings.STATIC_URL}/stadiums/{filename}"
+        section_data = SectionUpdate(view_image_url=view_image_url)
+        
+        # Update section
+        updated_stadium = await StadiumController.update_section(stadium_id, section_id, section_data)
+        
+        # Return response
+        return {
+            "data": updated_stadium,
+            "message": "Section view image uploaded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload_section_image: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload section view image: {str(e)}"
+        )
+
+
 @router.put(
     "/{stadium_id}/sections/{section_id}",
     response_model=StadiumResponse,
@@ -333,7 +516,7 @@ async def add_section(
 async def update_section(
     stadium_id: str = Path(..., description="Stadium ID"),
     section_id: str = Path(..., description="Section ID"),
-    section_data: StadiumSectionUpdate = None
+    section_data: SectionUpdate = None
 ):
     """
     Update a section in a stadium (admin only)
@@ -366,7 +549,7 @@ async def update_section(
 
 @router.delete(
     "/{stadium_id}/sections/{section_id}",
-    response_model=StadiumResponse,
+    response_model=dict,
     summary="Delete section",
     description="Delete a section from a stadium (admin only)",
     dependencies=[Depends(get_admin_user)]
@@ -380,13 +563,10 @@ async def delete_section(
     """
     try:
         # Delete section using controller
-        updated_stadium = await StadiumController.delete_section(stadium_id, section_id)
+        result = await StadiumController.delete_section(stadium_id, section_id)
         
         # Return response
-        return {
-            "data": updated_stadium,
-            "message": "Section deleted successfully"
-        }
+        return result
     
     except HTTPException:
         raise
@@ -398,36 +578,93 @@ async def delete_section(
         )
 
 
-@router.post(
-    "/{stadium_id}/sections/{section_id}/image",
-    response_model=StadiumResponse,
-    summary="Upload section image",
-    description="Upload view image for a section (admin only)",
-    dependencies=[Depends(get_admin_user)]
+@router.get(
+    "/{stadium_id}/sections",
+    summary="Get stadium sections",
+    description="Get sections for a stadium with filtering options"
 )
-async def upload_section_image(
+async def get_sections(
     stadium_id: str = Path(..., description="Stadium ID"),
-    section_id: str = Path(..., description="Section ID"),
-    file: UploadFile = File(..., description="Section view image file")
+    available_only: bool = Query(False, description="Filter for sections with available seats only"),
+    min_price: Optional[float] = Query(None, description="Minimum price"),
+    max_price: Optional[float] = Query(None, description="Maximum price"),
+    sort: Optional[str] = Query("price", description="Field to sort by"),
+    order: Optional[str] = Query("asc", description="Sort order (asc or desc)")
 ):
     """
-    Upload view image for a section (admin only)
+    Get sections for a stadium with filtering options
     """
     try:
-        # Upload image using controller
-        updated_stadium = await StadiumController.upload_section_image(stadium_id, section_id, file)
+        # Create search params
+        params = SectionSearchParams(
+            stadium_id=stadium_id,
+            available_only=available_only,
+            min_price=min_price,
+            max_price=max_price,
+            sort=sort,
+            order=order
+        )
+        
+        # Get sections from controller
+        sections = await StadiumController.get_sections(params)
         
         # Return response
-        return {
-            "data": updated_stadium,
-            "message": "Section image uploaded successfully"
-        }
+        return sections
     
+    except ValidationError as e:
+        logger.error(f"Validation error in get_sections: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in upload_section_image: {str(e)}")
+        logger.error(f"Error in get_sections: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload section image: {str(e)}"
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/availability",
+    summary="Check seat availability",
+    description="Check seat availability for an event"
+)
+async def check_availability(
+    stadium_id: str = Query(..., description="Stadium ID"),
+    event_id: str = Query(..., description="Event ID"),
+    section_id: Optional[str] = Query(None, description="Section ID (optional)")
+):
+    """
+    Check seat availability for an event
+    """
+    try:
+        # Create params
+        params = AvailabilityParams(
+            stadium_id=stadium_id,
+            event_id=event_id,
+            section_id=section_id
+        )
+        
+        # Check availability using controller
+        availability = await StadiumController.check_availability(params)
+        
+        # Return response
+        return availability
+    
+    except ValidationError as e:
+        logger.error(f"Validation error in check_availability: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in check_availability: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )

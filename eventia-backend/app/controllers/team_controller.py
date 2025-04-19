@@ -4,19 +4,16 @@ Team controller
 Controller for team-related operations
 """
 
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Any
 from datetime import datetime
-import uuid
 from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
-from fastapi import HTTPException, status, UploadFile, File
-import os
+from fastapi import HTTPException, status
 from pathlib import Path
-import shutil
 
 from ..db.mongodb import get_collection
-from ..models.team import TeamModel, PlayerModel
-from ..schemas.team import TeamCreate, TeamUpdate, TeamSearchParams
+from ..models.team import TeamModel
+from ..schemas.team import TeamCreate, TeamUpdate, TeamInDB, TeamSearchParams
 from ..config import settings
 from ..utils.logger import logger
 from ..utils.file import verify_image_exists, get_placeholder_image
@@ -43,8 +40,8 @@ class TeamController:
             # Build query
             query = {}
             
+            # Apply search filter
             if params.search:
-                # Text search on name and code
                 query["$or"] = [
                     {"name": {"$regex": params.search, "$options": "i"}},
                     {"code": {"$regex": params.search, "$options": "i"}}
@@ -68,14 +65,14 @@ class TeamController:
             # Convert to list of dicts
             teams = await cursor.to_list(length=params.limit)
             
-            # Process teams to ensure logo URLs are valid
+            # Process teams to ensure image URLs are valid
             for team in teams:
                 if team.get("logo_url"):
-                    logo_path = Path(settings.STATIC_DIR) / team["logo_url"].lstrip("/static/")
-                    if not logo_path.exists():
-                        # Use placeholder if image doesn't exist
+                    if not verify_image_exists(team["logo_url"], "teams", "team-placeholder.png"):
                         team["logo_url"] = get_placeholder_image("teams")
                         logger.warning(f"Team logo not found, using placeholder: {team['_id']}")
+                else:
+                    team["logo_url"] = get_placeholder_image("teams")
             
             # Calculate total pages
             total_pages = (total + params.limit - 1) // params.limit
@@ -132,11 +129,11 @@ class TeamController:
             
             # Verify logo image exists
             if team.get("logo_url"):
-                logo_path = Path(settings.STATIC_DIR) / team["logo_url"].lstrip("/static/")
-                if not logo_path.exists():
-                    # Use placeholder if image doesn't exist
+                if not verify_image_exists(team["logo_url"], "teams", "team-placeholder.png"):
                     team["logo_url"] = get_placeholder_image("teams")
                     logger.warning(f"Team logo not found, using placeholder: {team_id}")
+            else:
+                team["logo_url"] = get_placeholder_image("teams")
             
             # Convert to Pydantic model and return
             return TeamModel.from_mongo(team).dict()
@@ -145,53 +142,6 @@ class TeamController:
             raise
         except Exception as e:
             logger.error(f"Error getting team {team_id}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve team: {str(e)}"
-            )
-    
-    @staticmethod
-    async def get_team_by_code(code: str) -> Dict[str, Any]:
-        """
-        Get a team by its code
-        
-        Args:
-            code: Team code
-            
-        Returns:
-            Team data
-            
-        Raises:
-            HTTPException: If team not found
-        """
-        try:
-            # Get teams collection
-            collection = await get_collection(TeamModel.get_collection_name())
-            
-            # Find team
-            team = await collection.find_one({"code": code})
-            
-            if not team:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Team with code {code} not found"
-                )
-            
-            # Verify logo image exists
-            if team.get("logo_url"):
-                logo_path = Path(settings.STATIC_DIR) / team["logo_url"].lstrip("/static/")
-                if not logo_path.exists():
-                    # Use placeholder if image doesn't exist
-                    team["logo_url"] = get_placeholder_image("teams")
-                    logger.warning(f"Team logo not found, using placeholder: {team['_id']}")
-            
-            # Convert to Pydantic model and return
-            return TeamModel.from_mongo(team).dict()
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error getting team by code {code}: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to retrieve team: {str(e)}"
@@ -225,9 +175,11 @@ class TeamController:
                 if not verify_image_exists(team_data.logo_url, "teams", "team-placeholder.png"):
                     team_data.logo_url = get_placeholder_image("teams")
                     logger.warning(f"Team logo not found, using placeholder: {team_data.logo_url}")
+            else:
+                team_data.logo_url = get_placeholder_image("teams")
             
             # Create team
-            team_dict = team_data.dict(exclude_unset=True)
+            team_dict = team_data.dict()
             team_dict["created_at"] = datetime.utcnow()
             team_dict["updated_at"] = datetime.utcnow()
             
@@ -281,27 +233,25 @@ class TeamController:
             collection = await get_collection(TeamModel.get_collection_name())
             
             # Check if team exists
-            existing_team = await collection.find_one({"_id": ObjectId(team_id)})
-            if not existing_team:
+            team = await collection.find_one({"_id": ObjectId(team_id)})
+            
+            if not team:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Team with ID {team_id} not found"
                 )
             
-            # Check if team code already exists (if code is being updated)
-            if team_data.code is not None and team_data.code != existing_team.get("code"):
-                code_exists = await collection.find_one({
-                    "code": team_data.code,
-                    "_id": {"$ne": ObjectId(team_id)}
-                })
-                if code_exists:
+            # Check if code is being updated and if it conflicts
+            if team_data.code and team_data.code != team.get("code"):
+                existing_team = await collection.find_one({"code": team_data.code})
+                if existing_team and existing_team["_id"] != ObjectId(team_id):
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail=f"Team with code {team_data.code} already exists"
                     )
             
             # Prepare update data
-            update_data = {k: v for k, v in team_data.dict(exclude_unset=True).items() if v is not None}
+            update_data = {k: v for k, v in team_data.dict().items() if v is not None}
             
             # Verify logo image exists if provided
             if "logo_url" in update_data and update_data["logo_url"]:
@@ -321,7 +271,7 @@ class TeamController:
             if result.modified_count == 0 and not result.matched_count:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Team with ID {team_id} not found"
+                    detail=f"Team with ID {team_id} not found or no changes made"
                 )
             
             # Get updated team
@@ -340,7 +290,7 @@ class TeamController:
             )
     
     @staticmethod
-    async def delete_team(team_id: str) -> Dict[str, str]:
+    async def delete_team(team_id: str) -> Dict[str, Any]:
         """
         Delete a team
         
@@ -351,7 +301,7 @@ class TeamController:
             Deletion status
             
         Raises:
-            HTTPException: If team not found
+            HTTPException: If team not found or used in events
         """
         try:
             # Validate ID
@@ -366,20 +316,21 @@ class TeamController:
             
             # Check if team exists
             team = await collection.find_one({"_id": ObjectId(team_id)})
+            
             if not team:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Team with ID {team_id} not found"
                 )
             
-            # Check if team is referenced by any events
+            # Check if team is used in any events
             events_collection = await get_collection("events")
-            events_count = await events_collection.count_documents({"team_ids": ObjectId(team_id)})
+            event_count = await events_collection.count_documents({"team_ids": ObjectId(team_id)})
             
-            if events_count > 0:
+            if event_count > 0:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Cannot delete team: it is referenced by {events_count} events"
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Cannot delete team: it is used in {event_count} events"
                 )
             
             # Delete team
