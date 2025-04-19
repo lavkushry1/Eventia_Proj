@@ -1,52 +1,80 @@
-from pydantic import BaseModel, Field, validator
-from typing import Optional
-from datetime import datetime
+"""
+User Schemas
+-----------
+Pydantic models for user data validation
+"""
+
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, EmailStr, Field, validator
 import re
 
-
 class UserBase(BaseModel):
-    name: str
-    email: str
-
-    @validator("email")
-    def validate_email(cls, v):
-        if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", v):
-            raise ValueError("Invalid email format")
-        return v
-
-    @validator("name")
-    def validate_name(cls, v):
-        if len(v) < 3:
-            raise ValueError("Name must be at least 3 characters")
-        return v
-
+    """Base user schema with common attributes"""
+    email: EmailStr
+    is_active: bool = True
+    is_admin: bool = False
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str
-
-    @validator("password")
-    def validate_password(cls, v):
+    """Schema for creating a new user"""
+    password: str = Field(..., min_length=8)
+    
+    @validator('password')
+    def password_strength(cls, v):
+        """Validate password strength"""
         if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+            raise ValueError('Password must be at least 8 characters long')
+        
+        # Check for at least one uppercase, one lowercase, and one digit
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+            
         return v
 
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-
-class UserInDB(UserBase):
-    id: str = Field(alias="_id")
-    hashed_password: str
-    created_at: datetime
-    updated_at: datetime
+class UserUpdate(BaseModel):
+    """Schema for updating user information"""
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class UserResponse(UserBase):
-    id: str = Field(alias="_id")
-    created_at: datetime
+    """Schema for user response data"""
+    id: str = Field(..., alias="_id")
+    
+    class Config:
+        json_encoders = {
+            # This allows ObjectId to be properly serialized
+            # We'll use str(obj_id) in our MongoDB model
+        }
+        populate_by_name = True
+        # Allow referring to fields by their alias names
+        allow_population_by_field_name = True
 
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+class TokenResponse(BaseModel):
+    """Schema for token response"""
+    access_token: str
+    token_type: str
+
+class PasswordReset(BaseModel):
+    """Schema for password reset"""
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+# Schema for user list response
+class UserList(BaseModel):
+    """Schema for list of users with pagination info."""
+    users: List[UserResponse]
+    total: int
+
+# Schema for authentication token
+class TokenData(BaseModel):
+    """Schema for authentication token data."""
+    access_token: str
+    token_type: str
+    user: Dict[str, Any] 
