@@ -17,11 +17,12 @@ from ..utils.logger import logger
 # MongoDB client
 client = None
 db = None
+database = None  # Alias for db for backward compatibility
 
 
 async def connect_to_mongo():
     """Connect to MongoDB and initialize the client"""
-    global client, db
+    global client, db, database
     
     try:
         logger.info(f"Connecting to MongoDB: {settings.MONGODB_URL}")
@@ -34,6 +35,7 @@ async def connect_to_mongo():
         
         # Get database
         db = client[settings.MONGODB_DB]
+        database = db  # Set the alias
         
         # Validate connection
         await client.admin.command('ping')
@@ -56,6 +58,16 @@ async def close_mongo_connection():
     if client:
         logger.info("Closing MongoDB connection")
         client.close()
+
+
+async def get_database():
+    """Get the database instance"""
+    global db
+    
+    if not db:
+        await connect_to_mongo()
+    
+    return db
 
 
 async def initialize_indexes():

@@ -3,8 +3,8 @@ const path = require('path');
 const https = require('https');
 
 // Create directories if they don't exist
-const backendDir = path.join(__dirname, 'eventia-backend', 'app', 'static', 'teams');
-const frontendDir = path.join(__dirname, 'eventia-ticketing-flow', 'public', 'assets', 'teams');
+const backendDir = path.join(__dirname, 'app', 'static', 'teams');
+const frontendDir = path.join(__dirname, '..', 'eventia-ticketing-flow', 'public', 'assets', 'teams');
 
 // Ensure directories exist
 [backendDir, frontendDir].forEach(dir => {
@@ -58,10 +58,10 @@ async function generateTeamLogos() {
   for (const [team, color] of Object.entries(teamColors)) {
     const textColor = (team === 'csk' || team === 'lsg') ? '000000' : 'FFFFFF';
     const url = `https://placehold.co/500x500/${color}/${textColor}.png?text=${team.toUpperCase()}`;
-
+    
     const backendPath = path.join(backendDir, `${team}.png`);
     const frontendPath = path.join(frontendDir, `${team}.png`);
-
+    
     try {
       await downloadImage(url, backendPath);
       // Copy to frontend
@@ -71,8 +71,8 @@ async function generateTeamLogos() {
       console.error(`Error generating logo for ${team}:`, error.message);
     }
   }
-
+  
   console.log('All team logos generated successfully!');
 }
 
-generateTeamLogos().catch(console.error); 
+generateTeamLogos().catch(console.error);

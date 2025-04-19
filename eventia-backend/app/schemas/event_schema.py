@@ -71,18 +71,12 @@ class EventSchema(BaseModel):
         return v
 
 class EventResponse(BaseModel):
+    data: Optional[EventSchema] = Field(None, description="Event data")
+    message: str = Field(default="Success", description="Response message")
     updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
-    
-    @validator('date')
-    def validate_date(cls, v):
-        datetime.strptime(v, '%Y-%m-%d')
-        return v
-    
-    @validator('time')
-    def validate_time(cls, v):
-        datetime.strptime(v, '%H:%M')
-        return v
 
+# Alias for backward compatibility
+EventResponseSchema = EventResponse
 
 class EventCreateSchema(EventSchema):    
     class Config:

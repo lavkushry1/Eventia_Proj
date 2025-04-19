@@ -26,6 +26,9 @@ class CustomerInfo(BaseModel):
             raise ValueError('Invalid phone number format')
         return value
 
+# Alias for backward compatibility
+CustomerInfoSchema = CustomerInfo
+
 class BookingBase(BaseModel):
     """Base schema for booking data."""
     event_id: str = Field(..., description="The ID of the event being booked.")
@@ -46,6 +49,27 @@ class BookingSchema(BaseModel):
     payment_verified_at: Optional[datetime] = Field(None, description="The timestamp when the payment was verified.")
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="The last update timestamp of the booking.")
 
+class BookingCreateSchema(BookingBase):
+    """Schema for creating a new booking."""
+    class Config:
+        schema_extra = {
+            "example": {
+                "event_id": "5f8d0d55b54764421b7156a1",
+                "customer_info": {
+                    "name": "John Doe",
+                    "email": "john.doe@example.com",
+                    "phone": "+1234567890"
+                },
+                "selected_tickets": [
+                    {
+                        "ticket_type_id": "tkt-1",
+                        "quantity": 2,
+                        "price_per_ticket": 100.0
+                    }
+                ]
+            }
+        }
+
 class BookingResponseSchema(BaseModel):
     """Schema for booking response data, using pydantic."""
     booking_id: str = Field(..., description="The ID of the booking.")
@@ -61,33 +85,32 @@ class BookingResponseSchema(BaseModel):
     payment_verified_at: Optional[datetime] = Field(None, description="The timestamp when the payment was verified.")
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="The last update timestamp of the booking.")
 
-
-
-class UTRSubmissionSchema(Schema):
+class UTRSubmissionSchema(BaseModel):
     """Schema for UTR (Unique Transaction Reference) submission."""
-    booking_id = fields.Str(required=True)
-    utr = fields.Str(required=True)
+    booking_id: str = Field(..., description="The ID of the booking")
+    utr: str = Field(..., description="The UTR (Unique Transaction Reference) for the booking")
     
-    @validates('utr')
-    def validate_utr(self, value):
+    @validator('utr')
+    def validate_utr(cls, value):
         """Validate UTR format."""
         if not re.match(r'^[A-Za-z0-9]{10,23}$', value):
-            raise ValidationError('Invalid UTR format. Please enter the correct UTR number from your payment confirmation.')
+            raise ValueError('Invalid UTR format. Please enter the correct UTR number from your payment confirmation.')
+        return value
 
-class UTRResponseSchema(Schema):
+class UTRResponseSchema(BaseModel):
     """Schema for UTR verification response."""
-    booking_id = fields.Str(required=True)
-    ticket_id = fields.Str(required=True)
-    status = fields.Str(required=True)
-    message = fields.Str()
+    booking_id: str = Field(..., description="The ID of the booking")
+    ticket_id: str = Field(..., description="The ID of the ticket")
+    status: str = Field(..., description="The status of the UTR verification")
+    message: Optional[str] = Field(None, description="A message related to the UTR verification")
 
-class TicketSchema(Schema):
+class TicketSchema(BaseModel):
     """Schema for ticket data."""
-    ticket_id = fields.Str(required=True)
-    booking_id = fields.Str(required=True)
-    status = fields.Str(required=True)
-    quantity = fields.Int(required=True)
-    customer_info = fields.Nested(CustomerInfoSchema)
-    event = fields.Dict(required=True)
-    created_at = fields.DateTime()
-    verified_at = fields.DateTime(attribute='payment_verified_at') 
+    ticket_id: str = Field(..., description="The ID of the ticket")
+    booking_id: str = Field(..., description="The ID of the booking")
+    status: str = Field(..., description="The status of the ticket")
+    quantity: int = Field(..., description="The quantity of tickets")
+    customer_info: CustomerInfo = Field(..., description="Customer information")
+    event: dict = Field(..., description="Event information")
+    created_at: Optional[datetime] = Field(default_factory=datetime.now, description="The creation timestamp of the ticket")
+    verified_at: Optional[datetime] = Field(None, description="The timestamp when the ticket was verified", alias="payment_verified_at")

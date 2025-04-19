@@ -23,9 +23,10 @@ class PyObjectId(ObjectId):
             raise ValueError("Invalid ObjectId")
         return ObjectId(v)
     
+    # Replacing outdated Pydantic v1 method with Pydantic v2 method
     @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string")
+    def __get_pydantic_json_schema__(cls, _schema_generator, _field):
+        return {"type": "string"}
 
 
 class MongoBaseModel(BaseModel):

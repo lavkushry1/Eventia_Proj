@@ -4,14 +4,7 @@ Config Package Initialization
 This package contains configuration modules.
 """
 
-from app.config.settings import (
-    BaseConfig,
-    DevelopmentConfig,
-    TestingConfig,
-    ProductionConfig,
-    config_by_name,
-    get_config
-)
+from app.config.settings import Settings, settings
 
 from app.config.constants import (
     BookingStatus,
@@ -23,16 +16,12 @@ from app.config.constants import (
 )
 
 __all__ = [
-    'BaseConfig',
-    'DevelopmentConfig',
-    'TestingConfig',
-    'ProductionConfig',
-    'config_by_name',
-    'get_config',
+    'Settings',
+    'settings',
     'BookingStatus',
     'EventStatus',
     'EventCategory',
     'PaymentMode',
     'APIStatus',
     'APIMessage'
-] 
+]
