@@ -1,700 +1,249 @@
-/**
- * @Author: Roni Laukkarinen
- * @Date:   2025-04-18 17:01:14
- * @Last Modified by:   Roni Laukkarinen
- * @Last Modified time: 2025-04-18 18:01:29
- */
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import configManager from '../config';
-import { v4 as uuidv4 } from 'uuid';
-import {
-  EventResponse,
-  EventCreate,
-  EventUpdate,
-  EventList,
-  BookingCreate,
+import axios from 'axios';
+import configManager from './config';
+import type {
+  EventList, 
+  EventResponse, 
+  StadiumList, 
+  Stadium, 
+  SeatViewImageList,
+  TeamList,
+  BookingRequest,
   BookingResponse,
-  BookingList,
-  BookingDetails,
-  LoginRequest,
-  Token,
+  PaymentRequest,
+  PaymentResponse,
   PaymentSettingsResponse,
-  UTRSubmission
+  AdminLoginRequest,
+  AdminLoginResponse,
+  DashboardStats
 } from './types';
 
-// Extend AxiosInstance type for our custom methods
-declare module 'axios' {
-  interface AxiosInstance {
-    getEvent(eventId: string): Promise<EventResponse>;
-    getEvents(category?: string): Promise<EventResponse[]>;
-    getPaymentSettings(): Promise<ApiPaymentSettings>;
-    adminLogin(token: string): Promise<Token>;
-    adminLoginWithCredentials(username: string, password: string): Promise<Token>;
-    getAnalytics(token: string): Promise<ApiAnalyticsResponse>;
-    getPaymentMetrics(token: string): Promise<ApiPaymentMetricsResponse>;
-    updatePaymentSettings(token: string, data: ApiUpdatePaymentSettingsRequest): Promise<ApiPaymentSettings>;
-    bookTicket(bookingData: ApiBookingRequest): Promise<ApiBookingResponse>;
-    submitUTR(data: UTRSubmission): Promise<ApiUTRResponse>;
-    cleanupExpiredBookings(token: string): Promise<{
-      success: boolean;
-      message: string;
-      expired_count: number;
-      inventory_updated: number;
-    }>;
-  }
+interface EventQueryParams {
+  category?: string;
+  featured?: boolean;
+  page?: number;
+  limit?: number;
+  search?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
 }
 
-// Extend AxiosInstance for admin event updates
-declare module 'axios' {
-  interface AxiosInstance {
-    updateEventVenue(eventId: string, venue: string): Promise<{ venue: string }>;
-    uploadEventPoster(eventId: string, file: File): Promise<{ image_url: string }>;
-  }
+interface StadiumQueryParams {
+  search?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
 }
 
-// Extend AxiosInstance for admin image uploads
-declare module 'axios' {
-  interface AxiosInstance {
-    uploadEventLogo(eventId: string, file: File): Promise<{ logo_url: string }>;
-  }
+interface TeamQueryParams {
+  search?: string;
+  sort?: string;
+  order?: 'asc' | 'desc';
 }
 
-// Create axios instance with default config
+// Create axios instance with default configuration
 const api = axios.create({
-  baseURL: configManager.config().API_BASE_URL,
-  timeout: 15000,
+  baseURL: configManager.getApiUrl(''),
   headers: {
     'Content-Type': 'application/json',
-    'x-correlation-id': uuidv4(), // Add proper correlation ID
   },
 });
 
-// Add compatibility methods to api object
-api.getEvent = (eventId: string) => fetchEvent(eventId);
-api.getEvents = (category?: string) => fetchEvents(category);
-api.getPaymentSettings = () => fetchPaymentSettings();
-api.adminLogin = (token: string) => adminLogin(token);
-api.adminLoginWithCredentials = (username: string, password: string) => adminLoginWithCredentials(username, password);
-api.getAnalytics = (token: string) => {
-  return api.get('/admin/analytics', {
-    headers: { Authorization: `Bearer ${token}` }
-  }).then(resp => resp.data);
-};
-api.getPaymentMetrics = (token: string) => {
-  return api.get('/admin/payment-metrics', {
-    headers: { Authorization: `Bearer ${token}` }
-  }).then(resp => resp.data);
-};
-api.updatePaymentSettings = (token: string, data: Partial<ApiPaymentSettings>) => {
-  return adminUpdatePaymentSettings(data);
-};
-api.bookTicket = (bookingData: ApiBookingRequest) => createBooking(bookingData);
-api.submitUTR = (data: UTRSubmission) => verifyPayment(data);
-api.cleanupExpiredBookings = (token: string) => {
-  return api.post('/admin/bookings/cleanup', {}, {
-    headers: { Authorization: `Bearer ${token}` }
-  }).then(resp => resp.data);
-};
-
-// Admin-specific event updates
-api.updateEventVenue = (eventId: string, venue: string) => {
-  return api.put(`/api/events/${eventId}`, { venue }).then(resp => resp.data);
-};
-
-api.uploadEventPoster = (eventId: string, file: File) => {
-  const formData = new FormData();
-  formData.append('poster', file);
-  return api.post(`/api/events/${eventId}/poster`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }).then(resp => resp.data);
-};
-
-api.uploadEventLogo = (eventId: string, file: File) => {
-  const formData = new FormData();
-  formData.append('logo', file);
-  return api.post(`/api/events/${eventId}/logo`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }).then(resp => resp.data);
-};
-
-// Initialize the API with token from localStorage if available
-const token = localStorage.getItem('token');
-if (token) {
-  api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-}
-
-export { api };
-export default api;
-
-// Utility marker for performance tracking
-export function perfMark(name: string): void {
-  if (typeof performance !== 'undefined' && performance.mark) {
-    performance.mark(name);
-  }
-}
-
-// Utility to generate correlation IDs
-const generateUUID = (): string => {
-  return uuidv4();
-};
-
-// Add request interceptor for logging and performance tracking
-api.interceptors.request.use(
-  (config) => {
-    // Generate a correlation ID for request tracing
-    const correlationId = generateUUID();
-    config.headers['x-correlation-id'] = correlationId;
-    
-    // Mark request start for performance tracking
-    perfMark(`req-start-${config.url}`);
-    
-    // Log the request in development
-    if (import.meta.env.MODE === 'development') {
-      console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-        headers: config.headers,
-        data: config.data,
-        correlationId,
-      });
+// Add request interceptor for authentication
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('admin_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    
     return config;
-  },
-  (error) => {
-    console.error('API Request Error:', error);
-    return Promise.reject(error);
-  }
-);
+});
 
-// Add response interceptor for logging and performance tracking
+// Add response interceptor for error handling
 api.interceptors.response.use(
-  (response) => {
-    // Mark request end for performance tracking
-    perfMark(`req-end-${response.config.url}`);
-    
-    // Calculate duration
-    const startMark = `req-start-${response.config.url}`;
-    const endMark = `req-end-${response.config.url}`;
-    
-    try {
-      if (typeof performance !== 'undefined' && performance.measure) {
-        performance.measure(`req-${response.config.url}`, startMark, endMark);
-        const measure = performance.getEntriesByName(`req-${response.config.url}`, 'measure')[0];
-        const duration = measure ? measure.duration : 0;
-        
-        // Log in development
-        if (import.meta.env.MODE === 'development') {
-          console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status} (${duration.toFixed(2)}ms)`, {
-            data: response.data,
-            correlationId: response.config.headers['x-correlation-id'],
-          });
-        }
-      }
-    } catch (e) {
-      // Ignore performance API errors
-    }
-    
-    return response;
-  },
+  (response) => response,
   (error) => {
-    // Log error
-    if (error.response) {
-      console.error('API Response Error:', {
-        status: error.response.status,
-        data: error.response.data,
-        url: error.config?.url,
-        method: error.config?.method,
-        correlationId: error.config?.headers?.['x-correlation-id'],
-      });
-      
-      // Store correlation ID for error tracking
-      if (error.config?.headers?.['x-correlation-id']) {
-        sessionStorage.setItem('x-correlation-id', error.config.headers['x-correlation-id']);
+    // Handle session expiry
+    if (error.response && error.response.status === 401) {
+      // Check if the error is on an admin route
+      if (error.config.url.includes('/admin')) {
+        localStorage.removeItem('admin_token');
+        window.location.href = '/admin/login';
       }
-      
-      // Handle 401 unauthorized globally
-      if (error.response.status === 401 && !error.config.url.includes('/admin/login')) {
-        console.warn('User session expired or unauthorized');
-        // Clear auth tokens if not already in login page
-        if (!window.location.pathname.includes('/admin-login')) {
-          localStorage.removeItem('token');
-          delete api.defaults.headers.common['Authorization'];
-          
-          // Redirect to login with return URL
-          window.location.href = `/admin-login?returnUrl=${encodeURIComponent(window.location.pathname)}`;
-          
-          // Show message using toast if available
-          try {
-            // @ts-ignore Access to toast function
-            if (typeof window.toast === 'function') {
-              // @ts-ignore
-              window.toast({
-                title: "Session Expired",
-                description: "Your session has expired. Please login again.",
-                variant: "destructive"
-              });
-            }
-          } catch (e) {
-            console.error('Toast notification failed', e);
-          }
-        }
-      }
-      
-      // Handle 403 Forbidden - redirect to login
-      if (error.response.status === 403) {
-        console.warn('Access forbidden');
-        if (!window.location.pathname.includes('/login')) {
-          // Show message using toast if available
-          try {
-            // @ts-ignore Access to toast function
-            if (typeof window.toast === 'function') {
-              // @ts-ignore
-              window.toast({
-                title: "Access Denied",
-                description: "You don't have permission to access this resource.",
-                variant: "destructive"
-              });
-            }
-          } catch (e) {
-            console.error('Toast notification failed', e);
-          }
-          
-          // Redirect to login page
-          window.location.href = '/login';
-        }
-      }
-      
-      // Transform error to more user-friendly format
-      if (error.response.data?.detail) {
-        error.message = error.response.data.detail;
-      }
-    } else if (error.request) {
-      console.error('API Request Error: No response received', {
-        request: error.request,
-        url: error.config?.url,
-        method: error.config?.method,
-        correlationId: error.config?.headers?.['x-correlation-id'],
-      });
-      
-      // Check if network error
-      if (!navigator.onLine) {
-        error.message = "Your internet connection appears to be offline. Please check your network.";
-      } else {
-        error.message = "The server is not responding. Please try again later.";
-      }
-    } else {
-      console.error('API Error:', error.message);
     }
-    
     return Promise.reject(error);
   }
 );
 
-// API Types - Using type aliases instead of empty interfaces
-export type ApiEvent = EventResponse;
-export type ApiBookingRequest = BookingCreate;
-export type ApiPaymentSettings = PaymentSettingsResponse;
+// Handle image URLs to ensure they have proper base URL
+export const getImageUrl = (path: string | undefined | null): string => {
+  if (!path) return '';
+  
+  // Return as is if it's already an absolute URL
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  
+  // Add API_BASE_URL if it's a relative path
+  if (path.startsWith('/')) {
+    return configManager.getApiUrl(path);
+  }
+  
+  // Add static path for other cases
+  return `${configManager.getConfig().STATIC_URL}/${path}`;
+};
 
-// Analytics response interfaces
-export interface ApiAnalyticsResponse {
-  total_bookings: number;
-  total_revenue: number;
-  recent_bookings: Array<{
-    booking_id: string;
-    event_id: string;
-    event_title: string;
-    customer_name: string;
-    amount: number;
-    date: string;
-  }>;
-  event_popularity: Record<string, number>;
-}
+// Event API calls
+export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventList> => {
+  const { data } = await api.get('/api/events', { params });
+  
+  // Process image URLs in the response
+  data.events = data.events.map((event: EventResponse) => ({
+    ...event,
+    posterImage: event.posterImage ? getImageUrl(event.posterImage) : '',
+    teamOneLogo: event.teamOneLogo ? getImageUrl(event.teamOneLogo) : '',
+    teamTwoLogo: event.teamTwoLogo ? getImageUrl(event.teamTwoLogo) : '',
+  }));
+  
+  return data;
+};
 
-export interface ApiPaymentMetricsResponse {
-  total_transactions: number;
-  successful_payments: number;
-  payment_success_rate: number;
-  average_ticket_price: number;
-  revenue_by_category: Record<string, number>;
-  conversion_rate: number;
-  avg_payment_time_minutes: number;
-  confirmed_payments: number;
-  pending_payments: number;
-  expired_payments: number;
-  recent_payments: Array<{
-    id: string;
-    booking_id: string;
-    total_amount: number;
-    payment_verified_at: string | null;
-  }>;
-}
-
-export interface ApiUpdatePaymentSettingsRequest {
-  merchant_name: string;
-  vpa: string;
-  description?: string;
-  payment_mode?: 'vpa' | 'qr_image';
-  qr_image?: File;
-}
-
-// API Response interfaces
-export interface ApiBookingResponse {
-  booking_id: string;
-  total_amount: number;
-  status: string;
-  message?: string;
-}
-
-export interface ApiUTRResponse {
-  booking_id: string;
-  ticket_id: string;
-  status: string;
-  message: string;
-}
-
-// Interface for the admin login response from the backend
-interface AdminLoginResponse {
-  status: string;
-  message: string;
-  token?: string;
-  admin?: {
-    id: string;
-    username: string;
-    email: string;
+export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
+  const { data } = await api.get(`/api/events/${eventId}`);
+  
+  // Process image URLs
+  return {
+    ...data,
+    posterImage: data.posterImage ? getImageUrl(data.posterImage) : '',
+    teamOneLogo: data.teamOneLogo ? getImageUrl(data.teamOneLogo) : '',
+    teamTwoLogo: data.teamTwoLogo ? getImageUrl(data.teamTwoLogo) : '',
   };
-  timestamp: string;
-  error?: string;
-}
+};
 
-// API Functions
-export async function fetchEvents(category?: string, featured?: boolean) {
-  perfMark('fetchEvents-start');
+// Stadium API calls
+export const fetchStadiums = async (params: StadiumQueryParams = {}): Promise<StadiumList> => {
+  const { data } = await api.get('/api/stadiums', { params });
   
-  try {
-    const params: Record<string, string | boolean> = {};
-    if (category) params.category = category;
-    if (featured !== undefined) params.is_featured = featured;
-    
-    const response = await api.get('/events', { params });
-    
-    perfMark('fetchEvents-end');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching events:', error);
-    throw error;
-  }
-}
-
-export async function fetchEvent(eventId: string) {
-  perfMark(`fetchEvent-${eventId}-start`);
+  // Process image URLs
+  data.stadiums = data.stadiums.map((stadium: Stadium) => ({
+    ...stadium,
+    image_url: stadium.image_url ? getImageUrl(stadium.image_url) : '',
+    sections: stadium.sections?.map(section => ({
+      ...section,
+      image_url: section.image_url ? getImageUrl(section.image_url) : '',
+      views: section.views?.map(view => ({
+        ...view,
+        image_url: getImageUrl(view.image_url),
+      })),
+    })),
+  }));
   
-  try {
-    const response = await api.get(`/events/${eventId}`);
-    
-    perfMark(`fetchEvent-${eventId}-end`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching event ${eventId}:`, error);
-    throw error;
-  }
-}
+  return data;
+};
 
-export async function createBooking(bookingData: ApiBookingRequest): Promise<ApiBookingResponse> {
-  perfMark('createBooking-start');
+export const fetchStadium = async (stadiumId: string): Promise<Stadium> => {
+  const { data } = await api.get(`/api/stadiums/${stadiumId}`);
   
-  try {
-    const response = await api.post('/bookings', bookingData);
-    
-    perfMark('createBooking-end');
-    return response.data;
-  } catch (error) {
-    console.error('Error creating booking:', error);
-    throw error;
-  }
-}
+  // Process image URLs
+  return {
+    ...data,
+    image_url: data.image_url ? getImageUrl(data.image_url) : '',
+    sections: data.sections?.map(section => ({
+      ...section,
+      image_url: section.image_url ? getImageUrl(section.image_url) : '',
+      views: section.views?.map(view => ({
+        ...view,
+        image_url: getImageUrl(view.image_url),
+      })),
+    })),
+  };
+};
 
-export async function verifyPayment(data: UTRSubmission): Promise<ApiUTRResponse> {
-  perfMark(`verifyPayment-${data.booking_id}-start`);
+export const fetchSeatViewImages = async (stadiumId: string, sectionId: string): Promise<SeatViewImageList> => {
+  const { data } = await api.get(`/api/stadiums/${stadiumId}/sections/${sectionId}/views`);
   
-  try {
-    const response = await api.post('/bookings/verify-payment', data);
-    
-    perfMark(`verifyPayment-${data.booking_id}-end`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error verifying payment for booking ${data.booking_id}:`, error);
-    throw error;
-  }
-}
-
-export async function fetchBooking(bookingId: string) {
-  perfMark(`fetchBooking-${bookingId}-start`);
+  // Process image URLs
+  data.views = data.views.map(view => ({
+    ...view,
+    image_url: getImageUrl(view.image_url),
+  }));
   
-  try {
-    const response = await api.get(`/bookings/${bookingId}`);
-    
-    perfMark(`fetchBooking-${bookingId}-end`);
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching booking ${bookingId}:`, error);
-    throw error;
-  }
-}
+  return data;
+};
 
-export async function fetchPaymentSettings(): Promise<ApiPaymentSettings> {
-  perfMark('fetchPaymentSettings-start');
+// Team API calls
+export const fetchTeams = async (params: TeamQueryParams = {}): Promise<TeamList> => {
+  const { data } = await api.get('/api/teams', { params });
   
-  try {
-    // Use the correct endpoint path with the /api prefix if needed
-    const endpoint = api.defaults.baseURL?.includes('/api') ? '/payment-settings' : '/api/payment-settings';
-    console.log(`Fetching payment settings from: ${endpoint}`);
-    
-    const response = await api.get<ApiPaymentSettings>(endpoint);
-    
-    perfMark('fetchPaymentSettings-end');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching payment settings:', error);
-    // Return default settings if the API fails
-    return {
-      merchant_name: configManager.config().MERCHANT_NAME,
-      vpa: configManager.config().PAYMENT_VPA,
-      vpaAddress: configManager.config().PAYMENT_VPA,
-      isPaymentEnabled: configManager.config().PAYMENT_ENABLED,
-      qrImageUrl: configManager.config().QR_IMAGE_URL,
-      payment_mode: 'vpa',
-      description: 'Default payment settings',
-      updated_at: new Date().toISOString(),
-      type: 'payment_settings' // Required type field
-    };
-  }
-}
-
-// Admin API Functions
-export async function adminLogin(token: string): Promise<Token> {
-  perfMark('adminLogin-start');
+  // Process logo URLs
+  data.teams = data.teams.map(team => ({
+    ...team,
+    logo: getImageUrl(team.logo),
+  }));
   
-  try {
-    // Send the token in the format expected by the backend
-    const response = await api.post<AdminLoginResponse>('/admin/login', { token });
-    
-    // The backend returns a success message but not an actual token
-    // Use the provided token as the access token
-    if (response.data && response.data.status === 'success') {
-      // Store the admin token in localStorage
-      localStorage.setItem('token', token);
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Return a token object that matches the expected interface
-      const tokenResponse: Token = {
-        access_token: token,
-        message: response.data.message || 'Admin login successful',
-        timestamp: response.data.timestamp
-      };
-      
-      perfMark('adminLogin-end');
-      return tokenResponse;
-    } else {
-      throw new Error(response.data?.error || 'Invalid admin token');
-    }
-  } catch (error) {
-    console.error('Error logging in:', error);
-    throw error;
-  }
-}
+  return data;
+};
 
-export async function adminLoginWithCredentials(username: string, password: string): Promise<Token> {
-  perfMark('adminLoginWithCredentials-start');
+// Booking API calls
+export const createBooking = async (bookingData: BookingRequest): Promise<BookingResponse> => {
+  const { data } = await api.post('/api/bookings', bookingData);
+  return data;
+};
+
+export const fetchBooking = async (bookingId: string): Promise<BookingResponse> => {
+  const { data } = await api.get(`/api/bookings/${bookingId}`);
   
-  try {
-    // Send username and password to the backend
-    const response = await api.post<AdminLoginResponse>('/admin/login', { username, password });
-    
-    if (response.data && response.data.status === 'success') {
-      // The backend should return a session token for username/password login
-      const sessionToken = response.data.token || '';
-      
-      // Store the token in localStorage
-      localStorage.setItem('token', sessionToken);
-      api.defaults.headers.common['Authorization'] = `Bearer ${sessionToken}`;
-      
-      // Return a token object that matches the expected interface
-      const tokenResponse: Token = {
-        access_token: sessionToken,
-        message: response.data.message || 'Admin login successful',
-        timestamp: response.data.timestamp,
-        admin: response.data.admin
-      };
-      
-      perfMark('adminLoginWithCredentials-end');
-      return tokenResponse;
-    } else {
-      throw new Error(response.data?.error || 'Invalid credentials');
-    }
-  } catch (error) {
-    console.error('Error logging in with credentials:', error);
-    throw error;
+  // Process QR code URL if present
+  if (data.qr_code) {
+    data.qr_code = getImageUrl(data.qr_code);
   }
-}
-
-export async function adminLogout() {
-  // Remove token from localStorage
-  localStorage.removeItem('token');
-  delete api.defaults.headers.common['Authorization'];
   
-  return { success: true };
-}
+  return data;
+};
 
-export async function adminFetchEvents(page = 1, limit = 20) {
-  try {
-    const response = await api.get('/events', { 
-      params: { skip: (page - 1) * limit, limit },
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
-    });
-    
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      // Handle unauthorized error
-      adminLogout();
-    }
-    throw error;
-  }
-}
+// Payment API calls
+export const verifyPayment = async (paymentData: PaymentRequest): Promise<PaymentResponse> => {
+  const { data } = await api.post('/api/payments/verify', paymentData);
+  return data;
+};
 
-export async function adminCreateEvent(eventData: EventCreate) {
-  try {
-    const response = await api.post<EventResponse>('/events', eventData, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      adminLogout();
-    }
-    throw error;
-  }
-}
-
-export async function adminUpdateEvent(eventId: string, eventData: EventUpdate) {
-  try {
-    const response = await api.put<EventResponse>(`/events/${eventId}`, eventData, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      adminLogout();
-    }
-    throw error;
-  }
-}
-
-export async function adminDeleteEvent(eventId: string) {
-  try {
-    const response = await api.delete(`/events/${eventId}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    
-    return response.status === 204;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      adminLogout();
-    }
-    throw error;
-  }
-}
-
-export async function adminFetchBookings(page = 1, limit = 20) {
-  try {
-    const response = await api.get('/bookings', { 
-      params: { skip: (page - 1) * limit, limit },
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } 
-    });
-    
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      adminLogout();
-    }
-    throw error;
-  }
-}
-
-export async function adminUpdatePaymentSettings(settings: Partial<ApiPaymentSettings>) {
-  try {
-    // Use the correct endpoint path with the /api prefix if needed
-    const endpoint = api.defaults.baseURL?.includes('/api') ? '/payment-settings' : '/api/payment-settings';
-    console.log(`Updating payment settings at: ${endpoint}`);
-    
-    const response = await api.put(endpoint, settings, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      adminLogout();
-    }
-    throw error;
-  }
-}
-
-// Function to update config
-export async function fetchAppConfig() {
-  try {
-    // Initialize the configuration
-    await configManager.init();
-    const appConfig = configManager.config();
-    
-    // Update API baseURL with the latest config
-    api.defaults.baseURL = appConfig.API_BASE_URL;
-    
-    console.log('App config loaded:', appConfig);
-    
-    return appConfig;
-  } catch (error) {
-    console.error('Error fetching app config:', error);
-    throw error;
-  }
-}
-
-/**
- * Upload an image to the server
- * @param endpoint The API endpoint path 
- * @param formData FormData containing the file and other parameters
- * @returns API response with image URL
- */
-export const uploadImage = async (endpoint: string, formData: FormData) => {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+export const fetchPaymentSettings = async (): Promise<PaymentSettingsResponse> => {
+  const { data } = await api.get('/api/payments/settings');
   
-  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-    method: 'POST',
-    credentials: 'include',  // Include cookies for authentication
-    body: formData,
-    // Don't set Content-Type header - browser will set it with boundary for FormData
+  // Process QR image URL
+  data.qr_image = getImageUrl(data.qr_image);
+  
+  return data;
+};
+
+// Admin API calls
+export const adminLogin = async (credentials: AdminLoginRequest): Promise<AdminLoginResponse> => {
+  const { data } = await api.post('/api/admin/login', credentials);
+  
+  // Store token in localStorage
+  if (data.token) {
+    localStorage.setItem('admin_token', data.token);
+  }
+  
+  return data;
+};
+
+export const fetchDashboardStats = async (): Promise<DashboardStats> => {
+  const { data } = await api.get('/api/admin/dashboard/stats');
+  return data;
+};
+
+export const adminLogout = (): void => {
+  localStorage.removeItem('admin_token');
+  window.location.href = '/admin/login';
+};
+
+export const adminUploadQRImage = async (file: File): Promise<{ filename: string }> => {
+    const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post('/api/admin/upload/qr', formData, {
+      headers: {
+      'Content-Type': 'multipart/form-data',
+    },
   });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to upload image');
-  }
-  
-  return response.json();
+  return data;
 };
 
-// Initialize the API service
-const init = async (): Promise<boolean> => {
-  try {
-    // Set up API state based on environment
-    if (import.meta.env.MODE === 'development') {
-      console.log('API initialized in development mode');
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('Failed to initialize API service', error);
-    return false;
-  }
-};
+export default api;

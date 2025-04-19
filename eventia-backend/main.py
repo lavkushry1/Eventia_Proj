@@ -4,46 +4,41 @@
 # @Last Modified by:   Roni Laukkarinen
 # @Last Modified time: 2025-04-18 19:58:38
 """
-Main application module for Eventia API.
-
-This is the entry point for the Eventia ticketing system API.
-It configures the FastAPI application, includes routers, and sets up middleware.
+Eventia API
+---------
+Main application module for the Eventia event management platform API
 """
+
+import time
+import uuid
+from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
-import time
-import uuid
-from pathlib import Path
 
-# Import core modules
-from app.config.settings import settings
-from app.management.db import init_db
-from app.middleware.rate_limiter import RateLimiter
-from app.middleware.security import SecurityHeadersMiddleware
+from app.config import settings
 from app.utils.logger import logger
-from app.routers import auth, events, bookings, analytics
-# Import db
-from .app.db.mongodb import connect_to_mongo, close_mongo_connection, client, engine
+from app.middleware.security import SecurityHeadersMiddleware, RateLimiter
+from app.middleware.error_handlers import register_exception_handlers
+from app.utils.initialization import initialize_app
+from app.db.mongodb import database
+from app.routers import auth
 
-# Import middleware
-from .app.middleware.security import SecurityHeadersMiddleware
-from .app.middleware.rate_limiter import RateLimiter
-
+# Create FastAPI application
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    description=settings.PROJECT_DESCRIPTION,
-    version=settings.PROJECT_VERSION,
-    docs_url=None if not settings.ENABLE_DOCS else "/docs",
-    redoc_url=None if not settings.ENABLE_DOCS else "/redoc",
+    title=settings.project_name,
+    description=settings.description,
+    version=settings.version,
+    docs_url=None,  # Custom docs URL below
+    redoc_url="/redoc" if settings.debug else None,
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=[str(origin) for origin in settings.allowed_origins] or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "x-correlation-id"],
@@ -58,22 +53,17 @@ app.add_middleware(
     RateLimiter,
     rate_limit=100,
     time_window=60,
-    exempted_routes=[f"{settings.API_V1_STR}/health"],
+    exempted_routes=[f"{settings.api_v1_prefix}/health"],
     exempted_ips=["127.0.0.1"]
 )
 
-# Create uploads directory if it doesn't exist in app folder
-uploads_dir = Path(__file__).parent / "app" / "static" / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
+# Register error handlers
+register_exception_handlers(app)
 
-# Middleware for request ID and logging
-
+# Middleware for request ID and processing time
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    """
-    Middleware to add processing time and request ID headers.
-    Also logs request details and handles exceptions.
-    """
+    """Add processing time and request ID headers"""
     start_time = time.time()
     
     # Add request ID
@@ -81,133 +71,97 @@ async def add_process_time_header(request: Request, call_next):
     request.state.request_id = request_id
     
     # Process request
-    try:
-        response = await call_next(request)
-        process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
-        response.headers["X-Request-ID"] = request_id
-        
-        # Log request
-        logger.info(
-            f"Request: {request.method} {request.url.path} - "
-            f"Status: {response.status_code} - "
-            f"Time: {process_time:.4f}s - "
-            f"ID: {request_id}"
-        )
-        
-        return response
-    except Exception as e:
-        process_time = time.time() - start_time
-        logger.error(
-            f"Request: {request.method} {request.url.path} - "
-            f"Error: {str(e)} - "
-            f"Time: {process_time:.4f}s - "
-            f"ID: {request_id}",
-            exc_info=True
-        )
-        
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": "Internal server error"}
-        )
-
-# Global exception handler for expected exceptions
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions and log them."""
-    logger.warning(
-        f"HTTPException: {exc.status_code} {exc.detail} - "
-        f"Request: {request.method} {request.url.path}"
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    
+    # Add headers
+    response.headers["X-Process-Time"] = str(process_time)
+    response.headers["X-Request-ID"] = request_id
+    
+    # Log request details
+    logger.info(
+        f"Request: {request.method} {request.url.path} - "
+        f"Status: {response.status_code} - "
+        f"Time: {process_time:.4f}s - "
+        f"ID: {request_id}"
     )
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
-
-# Global exception handler for unexpected exceptions
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions and log them."""
-    logger.error(
-        f"Unhandled exception: {str(exc)} - "
-        f"Request: {request.method} {request.url.path}",
-        exc_info=True
-    )
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"}
-    )
-
-# Mount static files directory for uploads
-app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")  # Use parent to mount the root static folder
+    
+    return response
 
 # Startup and shutdown events
-from .app.management.db import init_db
 @app.on_event("startup")
 async def startup_db_client():
-    """Connect to MongoDB on startup."""
-    logger.info(f"Starting up {settings.PROJECT_NAME} server...")
-    await connect_to_mongo()
+    """Connect to MongoDB on startup"""
+    logger.info(f"Starting {settings.project_name}...")
+    
+    # Initialize application (create directories, etc.)
+    initialize_app()
+    
+    # Connect to database
+    await database.connect()
+    
+    # Log startup complete
+    logger.info(f"{settings.project_name} started successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    """Close MongoDB connection on shutdown"""
+    logger.info(f"Shutting down {settings.project_name}...")
+    
+    # Close database connection
+    await database.close()
+    
+    # Log shutdown complete
+    logger.info(f"{settings.project_name} shut down successfully")
 
-    """Close MongoDB connection on shutdown."""
-    logger.info(f"Shutting down {settings.PROJECT_NAME} server...")
-    await close_mongo_connection()
+
+# Mount static files for uploads and assets
+static_path = Path("app/static")
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Include routers with API version prefix
-api_prefix = settings.API_V1_STR
+api_prefix = settings.api_v1_prefix
 app.include_router(auth.router, prefix=api_prefix)
-app.include_router(events.router, prefix=api_prefix)
-app.include_router(bookings.router, prefix=api_prefix)
-app.include_router(analytics.router, prefix=api_prefix)
 
-# Health check endpoint
-@app.get(f"{api_prefix}/health", tags=["system"])
-async def health_check():
-    """Health check endpoint to verify the API is running and connected to the database."""
-    try:
-        # Check MongoDB connection
-        db_check = await client.admin.command("ping")
-
-        # Check if settings are initialized
-        try:
-            settings_check = await init_db(engine)
-
-        except Exception as e:
-            raise HTTPException(500, f"Error initializing settings: {str(e)}")
-
-        if db_check["ok"] == 1:
-            return {
-                "status": "ok",
-                "db": "connected",
-                "db_settings": "initialized" if settings_check else "not initialized",
-                "version": settings.PROJECT_VERSION
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        raise HTTPException(500, f"Database error: {str(e)}")
-
-# Custom Swagger UI with authentication
+# Custom Swagger UI
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
-    """Custom Swagger UI endpoint."""
+    """Custom Swagger UI endpoint"""
     return get_swagger_ui_html(
         openapi_url=f"{api_prefix}/openapi.json",
-        title=f"{settings.PROJECT_NAME} - API Documentation",
-        oauth2_redirect_url=f"/docs/oauth2-redirect",
+        title=f"{settings.project_name} - API Documentation",
+        oauth2_redirect_url="/docs/oauth2-redirect",
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui-bundle.js",
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui.css",
     )
 
+# Health check endpoint
+@app.get(f"{api_prefix}/health", tags=["System"])
+async def health_check():
+    """Health check endpoint to verify API and database status"""
+    try:
+        # Check database connection
+        db_connected = await database.is_connected()
+        
+        return {
+            "status": "ok",
+            "database": "connected" if db_connected else "disconnected",
+            "version": settings.version
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Health check failed: {str(e)}"
+        )
+
 # Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint with basic API info."""
+    """Root endpoint with API information"""
     return {
-        "message": f"Welcome to {settings.PROJECT_NAME}",
-        "docs": "/docs",
-        "version": settings.PROJECT_VERSION
+        "name": settings.project_name,
+        "version": settings.version,
+        "docs": "/docs"
     }

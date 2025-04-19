@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { expect, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import matchers from '@testing-library/jest-dom/matchers';
 
 // Mock environment variables
 vi.mock('import.meta.env', () => ({
@@ -24,3 +27,11 @@ window.matchMedia = window.matchMedia || vi.fn().mockImplementation(query => ({
   removeEventListener: vi.fn(),
   dispatchEvent: vi.fn(),
 })); 
+
+// Extend Vitest's expect method with methods from react-testing-library
+expect.extend(matchers);
+
+// Cleanup after each test case
+afterEach(() => {
+  cleanup();
+}); 

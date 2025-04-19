@@ -1,338 +1,213 @@
 """
 Authentication Controller
-------------------------
-This module handles business logic for user authentication and management.
+--------------------
+Functions for user authentication, token management, and account operations
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from passlib.context import CryptContext
-from jose import jwt, JWTError
-from fastapi import HTTPException, status
+import datetime
+from typing import Optional
 from bson.objectid import ObjectId
+import jwt
+from passlib.context import CryptContext
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 
-from app.core.config import settings
-from app.core.database import get_collection
+from app.config import settings
+from app.db.mongodb import database
+from app.schemas.users import UserCreate, UserInDB, UserResponse, TokenData
+from app.utils.security import generate_random_token
 
-# Setup password hashing context
+# Security setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-logger = logging.getLogger(__name__)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
-async def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    """
-    Get a user by email from the database.
-    
-    Args:
-        email: The user's email address
-        
-    Returns:
-        The user document if found, None otherwise
-    """
-    try:
-        users_collection = await get_collection("users")
-        user = await users_collection.find_one({"email": email})
-        return user
-    except Exception as e:
-        logger.error(f"Error getting user by email: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error when fetching user"
-        )
+# Database collections
+users_collection = database.get_collection("users")
 
-async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Get a user by ID from the database.
-    
-    Args:
-        user_id: The user's ID
-        
-    Returns:
-        The user document if found, None otherwise
-    """
-    try:
-        users_collection = await get_collection("users")
-        user = await users_collection.find_one({"_id": ObjectId(user_id)})
-        if user:
-            user["id"] = str(user["_id"])
-        return user
-    except Exception as e:
-        logger.error(f"Error getting user by ID: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error when fetching user"
-        )
 
-async def create_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Create a new user in the database.
-    
-    Args:
-        user_data: User information including email, name, and password
-        
-    Returns:
-        The created user document
-    """
-    try:
-        # Check if user already exists
-        existing_user = await get_user_by_email(user_data["email"])
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User with this email already exists"
-            )
-        
-        # Hash the password
-        user_data["hashed_password"] = pwd_context.hash(user_data.pop("password"))
-        
-        # Set default values
-        user_data["created_at"] = datetime.utcnow()
-        user_data["is_admin"] = False  # Default role is not admin
-        
-        # Insert user into database
-        users_collection = await get_collection("users")
-        result = await users_collection.insert_one(user_data)
-        
-        # Get the inserted user
-        created_user = await get_user_by_id(str(result.inserted_id))
-        logger.info(f"Created new user with ID: {result.inserted_id}")
-        
-        return created_user
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error creating user: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error creating user"
-        )
+async def get_user_by_email(email: str) -> Optional[UserInDB]:
+    """Retrieve a user by email"""
+    user_data = await users_collection.find_one({"email": email})
+    if user_data:
+        return UserInDB(**user_data)
+    return None
 
-async def authenticate_user(email: str, password: str) -> Dict[str, Any]:
-    """
-    Authenticate a user with email and password.
-    
-    Args:
-        email: The user's email
-        password: The user's password
-        
-    Returns:
-        The authenticated user if credentials are valid
-        
-    Raises:
-        HTTPException: If credentials are invalid or user not found
-    """
-    try:
-        user = await get_user_by_email(email)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
-            )
-        
-        if not verify_password(password, user["hashed_password"]):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
-            )
-        
-        # Convert ObjectId to string for the response
-        user["id"] = str(user["_id"])
-        return user
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication error"
-        )
+
+async def get_user_by_id(user_id: str) -> Optional[UserInDB]:
+    """Retrieve a user by ID"""
+    user_data = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if user_data:
+        return UserInDB(**user_data)
+    return None
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verify a plain password against a hashed password.
-    
-    Args:
-        plain_password: The plain text password to verify
-        hashed_password: The hashed password to compare against
-        
-    Returns:
-        True if the password matches, False otherwise
-    """
+    """Verify password against hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Create a JWT access token.
+
+def get_password_hash(password: str) -> str:
+    """Create password hash"""
+    return pwd_context.hash(password)
+
+
+async def authenticate_user(email: str, password: str) -> Optional[UserInDB]:
+    """Authenticate user with email and password"""
+    user = await get_user_by_email(email)
+    if not user:
+        return None
+    if not verify_password(password, user.password):
+        return None
+    return user
+
+
+def create_access_token(user_id: str) -> str:
+    """Create JWT access token for authenticated user"""
+    expiration = datetime.datetime.utcnow() + datetime.timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
     
-    Args:
-        data: The data to encode in the token
-        expires_delta: Optional expiration delta, defaults to settings
-        
-    Returns:
-        The encoded JWT token
-    """
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
-    to_encode.update({"exp": expire})
+    payload = TokenData(
+        sub=str(user_id),
+        exp=expiration
+    ).dict()
     
     return jwt.encode(
-        to_encode, 
-        settings.secret_key,
-        algorithm=settings.algorithm
+        payload,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm
     )
 
-async def update_user(user_id: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Update a user's information.
-    
-    Args:
-        user_id: The ID of the user to update
-        user_data: The new user data
-        
-    Returns:
-        The updated user document
-        
-    Raises:
-        HTTPException: If user not found or database error
-    """
-    try:
-        # Check if user exists
-        existing_user = await get_user_by_id(user_id)
-        if not existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        # Prepare update data
-        update_data = {k: v for k, v in user_data.items() if v is not None}
-        if not update_data:
-            return existing_user
-        
-        update_data["updated_at"] = datetime.utcnow()
-        
-        # Update user in database
-        users_collection = await get_collection("users")
-        await users_collection.update_one(
-            {"_id": ObjectId(user_id)},
-            {"$set": update_data}
-        )
-        
-        # Get updated user
-        updated_user = await get_user_by_id(user_id)
-        logger.info(f"Updated user with ID: {user_id}")
-        
-        return updated_user
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error updating user: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating user"
-        )
 
-async def update_password(user_id: str, current_password: str, new_password: str) -> bool:
-    """
-    Update a user's password.
+async def create_user(user_data: UserCreate) -> UserResponse:
+    """Create a new user account"""
+    # Check if user already exists
+    existing_user = await get_user_by_email(user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
     
-    Args:
-        user_id: The ID of the user
-        current_password: The current password
-        new_password: The new password
-        
-    Returns:
-        True if password was updated successfully
-        
-    Raises:
-        HTTPException: If current password is incorrect or database error
-    """
+    # Create new user
+    hashed_password = get_password_hash(user_data.password)
+    
+    new_user = UserInDB(
+        email=user_data.email,
+        password=hashed_password,
+        full_name=user_data.full_name,
+        is_active=True,
+        is_admin=False,
+        created_at=datetime.datetime.utcnow(),
+        updated_at=datetime.datetime.utcnow()
+    )
+    
+    result = await users_collection.insert_one(new_user.dict(by_alias=True))
+    
+    created_user = await get_user_by_id(result.inserted_id)
+    return UserResponse(
+        id=str(created_user.id),
+        email=created_user.email,
+        full_name=created_user.full_name,
+        is_active=created_user.is_active,
+        created_at=created_user.created_at,
+        updated_at=created_user.updated_at
+    )
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
+    """Get current user from access token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
     try:
-        # Get user
-        user = await get_user_by_id(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        # Verify current password
-        if not verify_password(current_password, user["hashed_password"]):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect"
-            )
-        
-        # Hash new password
-        hashed_password = pwd_context.hash(new_password)
-        
-        # Update password in database
-        users_collection = await get_collection("users")
-        await users_collection.update_one(
-            {"_id": ObjectId(user_id)},
-            {
-                "$set": {
-                    "hashed_password": hashed_password,
-                    "updated_at": datetime.utcnow()
-                }
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm]
+        )
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    
+    user = await get_user_by_id(user_id)
+    if user is None:
+        raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is disabled"
+        )
+    
+    return UserResponse(
+        id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        updated_at=user.updated_at
+    )
+
+
+async def request_password_reset(email: str) -> None:
+    """Generate password reset token and send to user"""
+    user = await get_user_by_email(email)
+    if not user:
+        # Don't reveal if email exists
+        return
+    
+    # Generate reset token
+    reset_token = generate_random_token()
+    expiration = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    
+    # Store token in database
+    await users_collection.update_one(
+        {"_id": user.id},
+        {
+            "$set": {
+                "reset_token": reset_token,
+                "reset_token_expires": expiration,
+                "updated_at": datetime.datetime.utcnow()
             }
-        )
-        
-        logger.info(f"Updated password for user with ID: {user_id}")
-        return True
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error updating password: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error updating password"
-        )
-
-async def delete_user(user_id: str) -> bool:
-    """
-    Delete a user from the database.
+        }
+    )
     
-    Args:
-        user_id: The ID of the user to delete
-        
-    Returns:
-        True if the user was deleted successfully
-        
-    Raises:
-        HTTPException: If user not found or database error
-    """
-    try:
-        # Check if user exists
-        existing_user = await get_user_by_id(user_id)
-        if not existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        # Delete user from database
-        users_collection = await get_collection("users")
-        result = await users_collection.delete_one({"_id": ObjectId(user_id)})
-        
-        if result.deleted_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        logger.info(f"Deleted user with ID: {user_id}")
-        return True
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting user: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error deleting user"
-        ) 
+    # In a real application, send email with reset link
+    # For now, just return token (would be removed in production)
+    return reset_token
+
+
+async def reset_password(token: str, new_password: str) -> bool:
+    """Reset user password using reset token"""
+    # Find user with valid token
+    user_data = await users_collection.find_one({
+        "reset_token": token,
+        "reset_token_expires": {"$gt": datetime.datetime.utcnow()}
+    })
+    
+    if not user_data:
+        return False
+    
+    # Update password and clear token
+    hashed_password = get_password_hash(new_password)
+    await users_collection.update_one(
+        {"_id": user_data["_id"]},
+        {
+            "$set": {
+                "password": hashed_password,
+                "updated_at": datetime.datetime.utcnow()
+            },
+            "$unset": {
+                "reset_token": "",
+                "reset_token_expires": ""
+            }
+        }
+    )
+    
+    return True 

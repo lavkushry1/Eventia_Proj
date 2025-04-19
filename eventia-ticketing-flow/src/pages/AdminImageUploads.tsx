@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { uploadImage } from '@/lib/api';
+import { adminUploadQRImage } from '@/lib/api';
+import configManager from '@/lib/config';
 
 interface UploadResponse {
   message: string;
@@ -15,55 +16,41 @@ const AdminImageUploads: React.FC = () => {
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'event' | 'venue' | 'team'>('event');
+  const [previewUrl, setPreviewUrl] = useState<string>('');
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-
-  const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError('');
+  const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
     setMessage('');
-    
+
     try {
-      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await adminUploadQRImage(file);
       
-      const formData = new FormData(e.currentTarget);
-      const file = formData.get('file') as File;
-      const id = formData.get('id') as string;
-      
-      if (!file || file.size === 0) {
-        throw new Error('Please select a file to upload');
+      if (response) {
+        setMessage('File uploaded successfully!');
+        setPreviewUrl(configManager.getImageUrl('payments', response.filename));
       }
-      
-      if (!id) {
-        throw new Error(`Please provide ${activeTab === 'team' ? 'a team code' : 'an ID'}`);
-      }
-      
-      let endpoint = '';
-      
-      switch (activeTab) {
-        case 'event':
-          endpoint = `/api/v1/admin/upload/event-poster?event_id=${id}`;
-          break;
-        case 'venue':
-          endpoint = `/api/v1/admin/upload/venue-image?venue_id=${id}`;
-          break;
-        case 'team':
-          endpoint = `/api/v1/admin/upload/team-logo?team_code=${id}`;
-          break;
-      }
-      
-      const uploadData = new FormData();
-      uploadData.append('file', file);
-      
-      const response = await uploadImage(endpoint, uploadData) as UploadResponse;
-      
-      setUploadedImageUrl(response.image_url);
-      setMessage(response.message);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during upload');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      setMessage('Error uploading file. Please try again.');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const file = formData.get('file') as File;
+    
+    if (!file || file.size === 0) {
+      setMessage('Please select a file to upload');
+      return;
+    }
+    
+    await handleFileUpload(file);
   };
 
   return (
@@ -98,14 +85,18 @@ const AdminImageUploads: React.FC = () => {
           Upload {activeTab === 'event' ? 'Event Poster' : activeTab === 'venue' ? 'Venue Image' : 'Team Logo'}
         </h2>
         
-        <form onSubmit={handleFileUpload} className="space-y-4">
+        <form onSubmit={handleFormSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label 
+              htmlFor="id-input"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               {activeTab === 'event' ? 'Event ID' : 
                activeTab === 'venue' ? 'Venue ID' : 
                'Team Code (e.g., CSK, MI)'}
             </label>
             <input
+              id="id-input"
               type="text"
               name="id"
               className="w-full p-2 border border-gray-300 rounded-md"
@@ -115,10 +106,14 @@ const AdminImageUploads: React.FC = () => {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label 
+              htmlFor="file-input"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Image File (PNG, JPG, JPEG, WEBP)
             </label>
             <input
+              id="file-input"
               type="file"
               name="file"
               accept=".png,.jpg,.jpeg,.webp"
@@ -150,12 +145,12 @@ const AdminImageUploads: React.FC = () => {
         )}
         
         {/* Image Preview */}
-        {uploadedImageUrl && (
+        {previewUrl && (
           <div className="mt-6">
             <h3 className="text-lg font-medium mb-2">Preview:</h3>
             <div className="border rounded-md overflow-hidden">
               <img
-                src={`${apiBaseUrl}${uploadedImageUrl}`}
+                src={previewUrl}
                 alt="Uploaded preview"
                 className="max-w-full h-auto object-contain max-h-80"
                 onError={(e) => {

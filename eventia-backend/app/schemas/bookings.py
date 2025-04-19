@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, EmailStr, validator
 from datetime import datetime
 import uuid
 
@@ -47,30 +47,21 @@ class UTRSubmission(BaseModel):
             raise ValueError("UTR number must be at least 8 characters")
         return v
 
-class BookingInDB(BookingBase):
-    booking_id: str = Field(default_factory=lambda: f"BKG-{str(uuid.uuid4())[:8].upper()}")
-    status: str = "pending"  # pending, payment_pending, confirmed, cancelled
+class BookingResponse(BookingBase):
+    booking_id: str
+    status: str  # pending, payment_pending, confirmed, cancelled
     total_amount: float
     ticket_id: Optional[str] = None
     utr: Optional[str] = None
     payment_verified: bool = False
-    payment_verified_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    
-    class Config:
-        orm_mode = True
-        json_encoders = {
-            datetime: lambda dt: dt.isoformat()
-        }
-
-class BookingResponse(BookingInDB):
-    pass
+    payment_verified_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+    message: Optional[str] = None
 
 class BookingList(BaseModel):
     bookings: List[BookingResponse]
     total: int
-
 
 class BookingDetails(BookingResponse):
     event_details: Dict[str, Any]
@@ -83,8 +74,9 @@ class BookingStatusUpdate(BaseModel):
         valid_statuses = ["pending", "payment_pending", "confirmed", "cancelled"]
         if v not in valid_statuses:
             raise ValueError(f"Status must be one of {valid_statuses}")
-        return v 
+        return v
 
+# Keep original schema for backward compatibility
 class BookingSchema(BaseModel):
     user_id: str
     event_id: str

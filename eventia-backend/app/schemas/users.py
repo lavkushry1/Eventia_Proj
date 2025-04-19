@@ -1,70 +1,119 @@
 """
 User Schemas
 -----------
-Pydantic models for user data validation
+Pydantic models for user data and authentication
 """
 
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, validator
 import re
+from datetime import datetime
+
+from bson import ObjectId
+from app.schemas.common import PyObjectId
 
 class UserBase(BaseModel):
-    """Base user schema with common attributes"""
+    """Base user data shared across schemas"""
     email: EmailStr
-    is_active: bool = True
-    is_admin: bool = False
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    full_name: str
+    
+    class Config:
+        populate_by_name = True
 
 class UserCreate(UserBase):
-    """Schema for creating a new user"""
-    password: str = Field(..., min_length=8)
+    """User creation data"""
+    password: str
     
     @validator('password')
     def password_strength(cls, v):
         """Validate password strength"""
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
-        
-        # Check for at least one uppercase, one lowercase, and one digit
-        if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not re.search(r'\d', v):
-            raise ValueError('Password must contain at least one digit')
-            
         return v
 
+class UserLogin(BaseModel):
+    """User login credentials"""
+    email: EmailStr
+    password: str
+
 class UserUpdate(BaseModel):
-    """Schema for updating user information"""
+    """Schema for updating user details"""
+    full_name: Optional[str] = None
     email: Optional[EmailStr] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    password: Optional[str] = None
     is_active: Optional[bool] = None
 
+class UserPasswordUpdate(BaseModel):
+    """Schema for updating user password"""
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+    
+    @validator('confirm_password')
+    def passwords_match(cls, v, values):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError('Passwords do not match')
+        return v
+
 class UserResponse(UserBase):
-    """Schema for user response data"""
-    id: str = Field(..., alias="_id")
+    """User data sent in responses"""
+    id: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
     
     class Config:
-        json_encoders = {
-            # This allows ObjectId to be properly serialized
-            # We'll use str(obj_id) in our MongoDB model
-        }
         populate_by_name = True
-        # Allow referring to fields by their alias names
-        allow_population_by_field_name = True
+        schema_extra = {
+            "example": {
+                "id": "60d5e1d75a3b93d3c2f3c281",
+                "email": "user@example.com",
+                "full_name": "Test User",
+                "is_active": True,
+                "created_at": "2023-01-01T00:00:00",
+                "updated_at": "2023-01-01T00:00:00"
+            }
+        }
 
 class TokenResponse(BaseModel):
-    """Schema for token response"""
+    """Schema for authentication token response"""
     access_token: str
     token_type: str
 
+class TokenData(BaseModel):
+    """JWT token data"""
+    sub: str
+    exp: Optional[datetime] = None
+
 class PasswordReset(BaseModel):
-    """Schema for password reset"""
+    """Password reset data"""
     token: str
-    new_password: str = Field(..., min_length=8)
+    new_password: str
+    
+    @validator('new_password')
+    def password_strength(cls, v):
+        """Validate password strength"""
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        return v
+
+class UserInDB(UserBase):
+    """User data stored in database"""
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    password: str
+    is_active: bool = True
+    is_admin: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    reset_token: Optional[str] = None
+    reset_token_expires: Optional[datetime] = None
+    
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {
+            ObjectId: str
+        }
 
 # Schema for user list response
 class UserList(BaseModel):

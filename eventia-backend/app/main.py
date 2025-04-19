@@ -8,12 +8,14 @@ import time
 import uuid
 from pathlib import Path
 
-from .core.config import settings, logger
-from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings
+from .config import settings
+from .utils.logger import logger
+from .utils.initialization import ensure_directories, initialize_app
+from .db.mongodb import connect_to_mongo, close_mongo_connection
 from .middleware.security import SecurityHeadersMiddleware, RateLimiter
 
 # Import routers
-from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views, discounts, admin_discounts, payment
+from .routers import auth, events, bookings, stadiums, admin_payment
 
 # Create FastAPI app
 app = FastAPI(
@@ -27,7 +29,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if hasattr(settings, 'CORS_ORIGINS') else settings.BACKEND_CORS_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -45,14 +47,6 @@ app.add_middleware(
     exempted_routes=["/api/healthcheck"],
     exempted_ips=["127.0.0.1"]
 )
-
-# Create uploads directory if it doesn't exist
-uploads_dir = Path(__file__).parent / "static" / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
-
-# Create teams directory if it doesn't exist
-teams_dir = Path(__file__).parent / "static" / "teams"
-teams_dir.mkdir(parents=True, exist_ok=True)
 
 # Middleware for request ID and logging
 @app.middleware("http")
@@ -118,52 +112,35 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"}
     )
 
-# Mount static files directory for uploads
-app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")
-
-# Mount specific static directory for team logos
-app.mount("/static/teams", StaticFiles(directory=str(teams_dir)), name="teams")
+# Mount static files for uploads and assets
+static_path = Path("app/static")
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 # Startup and shutdown events
 @app.on_event("startup")
-async def startup_db_client():
+async def startup_event():
     logger.info("Starting up Eventia API server...")
     await connect_to_mongo()
-    init_default_settings()
-    check_database_collections()
+    await initialize_app()
 
 @app.on_event("shutdown")
-async def shutdown_db_client():
+async def shutdown_event():
     logger.info("Shutting down Eventia API server...")
     await close_mongo_connection()
 
-# Include routers
-app.include_router(auth.router)
-app.include_router(events.router)
-app.include_router(bookings.router)
-app.include_router(settings_router.router)
-app.include_router(admin.router)  # No prefix as it already has its own prefix
-app.include_router(discounts.router)
-app.include_router(bookings.router)
-app.include_router(admin_discounts.router)
-app.include_router(payment.router)
+# Include routers with API prefix
+api_prefix = "/api"
+app.include_router(auth.router, prefix=api_prefix)
+app.include_router(events.router, prefix=api_prefix)
+app.include_router(bookings.router, prefix=api_prefix)
+app.include_router(stadiums.router, prefix=api_prefix)
+app.include_router(admin_payment.router, prefix=api_prefix)
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])
 async def health_check():
     """Health check endpoint to verify the API is running."""
-    return {"status": "ok"}
-
-# Custom Swagger UI with authentication
-@app.get("/api/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
-    return get_swagger_ui_html(
-        openapi_url=f"{settings.API_V1_STR}/openapi.json",
-        title=f"{settings.PROJECT_NAME} - API Documentation",
-        oauth2_redirect_url=f"{settings.API_V1_STR}/docs/oauth2-redirect",
-        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui-bundle.js",
-        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@4/swagger-ui.css",
-    )
+    return {"status": "ok", "version": "1.0.0"}
 
 # Root endpoint
 @app.get("/")
