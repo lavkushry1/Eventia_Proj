@@ -1,182 +1,164 @@
 """
 Event Schema
 ----------
-This module defines schemas for event-related operations.
+This module defines schemas for event-related operations and the response
+of the event endpoint.
 """
 
-from marshmallow import Schema, fields, validate, validates, ValidationError, post_load
+from pydantic import BaseModel, Field, validator, UUID4
 from datetime import datetime
 from app.config.constants import EventStatus, EventCategory
+from typing import List, Optional
 
-class TeamSchema(Schema):
+class TeamSchema(BaseModel):
     """Team schema for event teams."""
-    name = fields.Str(required=True)
-    code = fields.Str(required=True)
-    color = fields.Str(default='#000000')
-    secondary_color = fields.Str(default='#FFFFFF')
+    name: str = Field(..., description="Name of the team")
+    code: str = Field(..., description="Unique code for the team")
+    color: str = Field(default='#000000', description="Primary color of the team")
+    secondary_color: str = Field(default='#FFFFFF', description="Secondary color of the team")
+    home_ground: Optional[str] = Field(None, description="Home ground of the team")
+    logo: Optional[str] = Field(None, description="Logo of the team")
 
-class TicketTypeSchema(Schema):
+class TeamInfo(BaseModel):
+    """Team schema for event teams."""
+    name: str = Field(..., description="Name of the team")
+    code: str = Field(..., description="Unique code for the team")
+    color: Optional[str] = Field(None, description="Primary color of the team")
+    secondary_color: Optional[str] = Field(None, description="Secondary color of the team")
+    home_ground: Optional[str] = Field(None, description="Home ground of the team")
+    logo: Optional[str] = Field(None, description="Logo of the team")
+
+class TicketTypeSchema(BaseModel):
     """Ticket type schema for event ticket types."""
-    id = fields.Str()
-    name = fields.Str(required=True)
-    price = fields.Float(required=True, validate=validate.Range(min=0))
-    available = fields.Int(required=True, validate=validate.Range(min=0))
-    description = fields.Str()
+    id: Optional[str] = Field(None, description="Unique identifier for the ticket type")
+    name: str = Field(..., description="Name of the ticket type")
+    price: float = Field(..., ge=0, description="Price of the ticket type")
+    available: int = Field(..., ge=0, description="Number of tickets available for this type")
+    description: Optional[str] = Field(None, description="Description of the ticket type")
 
-class EventTeamsSchema(Schema):
+class EventTeamsSchema(BaseModel):
     """Event teams schema."""
-    home = fields.Nested(TeamSchema, required=True)
-    away = fields.Nested(TeamSchema, required=True)
+    home: TeamSchema = Field(..., description="Home team information")
+    away: TeamSchema = Field(..., description="Away team information")
 
-class EventSchema(Schema):
+class EventSchema(BaseModel):
     """Schema for event data."""
-    id = fields.Str()
-    name = fields.Str(required=True)
-    description = fields.Str()
-    date = fields.Str(required=True)
-    time = fields.Str(required=True)
-    venue = fields.Str(required=True)
-    price = fields.Float(required=True, validate=validate.Range(min=0))
-    availability = fields.Int(required=True, validate=validate.Range(min=0))
-    image_url = fields.Str()
-    category = fields.Str(validate=validate.OneOf(EventCategory.values()))
-    is_featured = fields.Bool(default=False)
-    status = fields.Str(validate=validate.OneOf(EventStatus.values()), default=EventStatus.AVAILABLE)
-    teams = fields.Nested(EventTeamsSchema)
-    ticketTypes = fields.List(fields.Nested(TicketTypeSchema))
-    created_at = fields.DateTime(default=datetime.now)
-    updated_at = fields.DateTime(default=datetime.now)
-    
-    @validates('date')
-    def validate_date(self, value):
-        """Validate date format."""
-        try:
-            datetime.strptime(value, '%Y-%m-%d')
-        except ValueError:
-            raise ValidationError('Invalid date format. Use YYYY-MM-DD')
-    
-    @validates('time')
-    def validate_time(self, value):
-        """Validate time format."""
-        try:
-            datetime.strptime(value, '%H:%M')
-        except ValueError:
-            raise ValidationError('Invalid time format. Use HH:MM')
+    id: Optional[str] = Field(None, description="Unique identifier for the event")
+    name: str = Field(..., description="Name of the event")
+    description: Optional[str] = Field(None, description="Description of the event")
+    date: str = Field(..., description="Date of the event (YYYY-MM-DD)")
+    time: str = Field(..., description="Time of the event (HH:MM)")
+    venue: str = Field(..., description="Venue of the event")
+    price: float = Field(..., ge=0, description="Price of the event")
+    availability: int = Field(..., ge=0, description="Number of tickets available for the event")
+    image_url: Optional[str] = Field(None, description="URL of the event image")
+    category: str = Field(..., description="Category of the event")
+    is_featured: bool = Field(default=False, description="Whether the event is featured")
+    status: str = Field(default=EventStatus.AVAILABLE, description="Status of the event")
+    teams: EventTeamsSchema = Field(..., description="Teams playing in the event")
+    ticketTypes: List[TicketTypeSchema] = Field(..., description="List of ticket types for the event")
+    created_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was created")
+    updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
 
-class EventResponseSchema(Schema):
-    """Schema for event response data."""
-    id = fields.Str(required=True)
-    title = fields.Str(required=True, attribute='name')
-    description = fields.Str()
-    date = fields.Str(required=True)
-    time = fields.Str(required=True)
-    venue = fields.Str(required=True)
-    ticket_price = fields.Float(required=True, attribute='price')
-    tickets_available = fields.Int(required=True, attribute='availability')
-    image_url = fields.Str()
-    category = fields.Str()
-    is_featured = fields.Bool()
-    status = fields.Str()
-    
-    # Team data
-    team_home = fields.Method('get_team_home')
-    team_away = fields.Method('get_team_away')
-    
-    # Ticket types
-    ticket_types = fields.Method('get_ticket_types')
-    
-    def get_team_home(self, obj):
-        """Get home team data."""
-        if not obj.get('teams'):
-            return None
-        
-        home = obj['teams'].get('home', {})
-        return {
-            "name": home.get('name', ''),
-            "logo": home.get('code', '').lower(),
-            "primary_color": home.get('color', '#000000'),
-            "secondary_color": home.get('secondary_color', '#FFFFFF')
-        }
-    
-    def get_team_away(self, obj):
-        """Get away team data."""
-        if not obj.get('teams'):
-            return None
-        
-        away = obj['teams'].get('away', {})
-        return {
-            "name": away.get('name', ''),
-            "logo": away.get('code', '').lower(),
-            "primary_color": away.get('color', '#000000'),
-            "secondary_color": away.get('secondary_color', '#FFFFFF')
-        }
-    
-    def get_ticket_types(self, obj):
-        """Get ticket types."""
-        ticket_types = obj.get('ticketTypes', [])
-        
-        if not ticket_types:
-            # Create default ticket type
-            return [{
-                "id": f"tkt_default_{obj.get('id', 'unknown')}",
-                "name": "Standard",
-                "price": obj.get('price', 0),
-                "available": obj.get('availability', 0),
-                "description": "Standard ticket"
-            }]
-        
-        return ticket_types
+    @validator('date')
+    def validate_date(cls, v):
+        datetime.strptime(v, '%Y-%m-%d')
+        return v
 
-class EventCreateSchema(EventSchema):
-    """Schema for creating events."""
-    
-    @post_load
-    def make_event(self, data, **kwargs):
-        """Process data after validation."""
-        # Generate unique ID if not provided
-        if 'id' not in data:
-            data['id'] = f"evt_{int(datetime.now().timestamp())}"
-        
-        # Set timestamps
-        data['created_at'] = datetime.now()
-        data['updated_at'] = datetime.now()
-        
-        return data
+    @validator('time')
+    def validate_time(cls, v):
+        datetime.strptime(v, '%H:%M')
+        return v
 
-class EventUpdateSchema(Schema):
+class EventResponse(BaseModel):
+    updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
+    
+    @validator('date')
+    def validate_date(cls, v):
+        datetime.strptime(v, '%Y-%m-%d')
+        return v
+    
+    @validator('time')
+    def validate_time(cls, v):
+        datetime.strptime(v, '%H:%M')
+        return v
+
+
+class EventCreateSchema(EventSchema):    
+    class Config:
+      schema_extra = {
+          "example": {
+              "name": "Example Event",
+              "description": "This is an example event.",
+              "date": "2024-12-31",
+              "time": "20:00",
+              "venue": "Example Stadium",
+              "price": 100.00,
+              "availability": 1000,
+              "image_url": "https://example.com/event.jpg",
+              "category": "sports",
+              "is_featured": True,
+              "status": "available",
+              "teams": {
+                  "home": {
+                      "name": "Home Team",
+                      "code": "HT",
+                      "color": "#FF0000",
+                      "secondary_color": "#FFFFFF",
+                      "logo": "https://example.com/ht.png"
+                  },
+                  "away": {
+                      "name": "Away Team",
+                      "code": "AT",
+                      "color": "#0000FF",
+                      "secondary_color": "#FFFFFF",
+                      "logo": "https://example.com/at.png"
+                  }
+              },
+              "ticketTypes": [
+                  {
+                      "id": "tkt-1",
+                      "name": "VIP",
+                      "price": 500.00,
+                      "available": 100,
+                      "description": "VIP access"
+                  },
+                  {
+                      "id": "tkt-2",
+                      "name": "General",
+                      "price": 100.00,
+                      "available": 900,
+                      "description": "General admission"
+                  }
+              ]
+          }
+      }
+
+class EventUpdateSchema(BaseModel):
     """Schema for updating events."""
-    name = fields.Str()
-    description = fields.Str()
-    date = fields.Str()
-    time = fields.Str()
-    venue = fields.Str()
-    price = fields.Float(validate=validate.Range(min=0))
-    availability = fields.Int(validate=validate.Range(min=0))
-    image_url = fields.Str()
-    category = fields.Str(validate=validate.OneOf(EventCategory.values()))
-    is_featured = fields.Bool()
-    status = fields.Str(validate=validate.OneOf(EventStatus.values()))
-    teams = fields.Nested(EventTeamsSchema)
-    ticketTypes = fields.List(fields.Nested(TicketTypeSchema))
-    
-    @validates('date')
-    def validate_date(self, value):
-        """Validate date format."""
-        try:
-            datetime.strptime(value, '%Y-%m-%d')
-        except ValueError:
-            raise ValidationError('Invalid date format. Use YYYY-MM-DD')
-    
-    @validates('time')
-    def validate_time(self, value):
-        """Validate time format."""
-        try:
-            datetime.strptime(value, '%H:%M')
-        except ValueError:
-            raise ValidationError('Invalid time format. Use HH:MM')
-    
-    @post_load
-    def update_timestamp(self, data, **kwargs):
-        """Update timestamp on validation."""
-        data['updated_at'] = datetime.now()
-        return data 
+    name: Optional[str] = Field(None, description="Name of the event")
+    description: Optional[str] = Field(None, description="Description of the event")
+    date: Optional[str] = Field(None, description="Date of the event (YYYY-MM-DD)")
+    time: Optional[str] = Field(None, description="Time of the event (HH:MM)")
+    venue: Optional[str] = Field(None, description="Venue of the event")
+    price: Optional[float] = Field(None, ge=0, description="Price of the event")
+    availability: Optional[int] = Field(None, ge=0, description="Number of tickets available for the event")
+    image_url: Optional[str] = Field(None, description="URL of the event image")
+    category: Optional[str] = Field(None, description="Category of the event")
+    is_featured: Optional[bool] = Field(None, description="Whether the event is featured")
+    status: Optional[str] = Field(None, description="Status of the event")
+    teams: Optional[EventTeamsSchema] = Field(None, description="Teams playing in the event")
+    ticketTypes: Optional[List[TicketTypeSchema]] = Field(None, description="List of ticket types for the event")
+    updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
+
+    @validator('date')
+    def validate_date(cls, v):
+        if v:
+            datetime.strptime(v, '%Y-%m-%d')
+        return v
+
+    @validator('time')
+    def validate_time(cls, v):
+        if v:
+            datetime.strptime(v, '%H:%M')
+        return v

@@ -7,7 +7,7 @@ MAX_ATTEMPTS=30
 ATTEMPTS=0
 
 # Using a more reliable connection check with Python
-until python -c "
+until /usr/local/bin/python3 -c "
 import sys
 import time
 import os
@@ -46,7 +46,7 @@ echo "MongoDB is ready!"
 # Run the seed script if SEED_DATA is set to true
 if [ "${SEED_DATA}" = "true" ]; then
     echo "Seeding database with sample data..."
-    python seed_data.py
+    /usr/local/bin/python3 seed_data.py
 fi
 
 # Execute the CMD from Dockerfile (or docker-compose)

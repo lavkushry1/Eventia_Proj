@@ -13,7 +13,7 @@ from .core.database import connect_to_mongo, close_mongo_connection, init_defaul
 from .middleware.security import SecurityHeadersMiddleware, RateLimiter
 
 # Import routers
-from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views, discounts, admin_discounts
+from .routers import auth, events, bookings, settings as settings_router, admin, stadiums, stadium_views, discounts, admin_discounts, payment
 
 # Create FastAPI app
 app = FastAPI(
@@ -130,6 +130,7 @@ async def startup_db_client():
     logger.info("Starting up Eventia API server...")
     await connect_to_mongo()
     init_default_settings()
+    check_database_collections()
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
@@ -145,6 +146,7 @@ app.include_router(admin.router)  # No prefix as it already has its own prefix
 app.include_router(discounts.router)
 app.include_router(bookings.router)
 app.include_router(admin_discounts.router)
+app.include_router(payment.router)
 
 # Health check endpoint
 @app.get("/api/healthcheck", tags=["system"])

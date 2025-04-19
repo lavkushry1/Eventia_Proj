@@ -19,6 +19,7 @@ class TeamInfo(BaseModel):
     logo: Optional[str] = None
 
 class EventBase(BaseModel):
+    price: float
     title: str
     description: str
     date: str
@@ -102,7 +103,8 @@ class EventInDB(EventBase):
         }
 
 class EventResponse(EventInDB):
-    pass
+    id:str
+    
 
 class EventList(BaseModel):
     events: List[EventResponse]
