@@ -1,51 +1,52 @@
+from pydantic import BaseModel, Field, validator
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, validator
 from datetime import datetime
+import re
+
 
 class UserBase(BaseModel):
-    email: EmailStr
     name: str
+    email: str
+
+    @validator("email")
+    def validate_email(cls, v):
+        if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", v):
+            raise ValueError("Invalid email format")
+        return v
+
+    @validator("name")
+    def validate_name(cls, v):
+        if len(v) < 3:
+            raise ValueError("Name must be at least 3 characters")
+        return v
+
 
 class UserCreate(UserBase):
     password: str
-    
-    @validator('password')
-    def password_min_length(cls, v):
+
+    @validator("password")
+    def validate_password(cls, v):
         if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
+            raise ValueError("Password must be at least 8 characters")
         return v
 
-class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    name: Optional[str] = None
-    password: Optional[str] = None
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 
 class UserInDB(UserBase):
-    id: str
+    id: str = Field(alias="_id")
     hashed_password: str
-    role: str = "admin"
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-    
-    class Config:
-        orm_mode = True
-        json_encoders = {
-            datetime: lambda dt: dt.isoformat()
-        }
+    created_at: datetime
+    updated_at: datetime
 
 class UserResponse(UserBase):
-    id: str
-    role: str
+    id: str = Field(alias="_id")
+    created_at: datetime
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
-
-class TokenPayload(BaseModel):
-    sub: str
-    exp: Optional[int] = None
-
-class LoginRequest(BaseModel):
-    username: EmailStr
-    password: str 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None

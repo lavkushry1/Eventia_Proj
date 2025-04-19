@@ -14,21 +14,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
-import os
 import time
 import uuid
 from pathlib import Path
 
 # Import core modules
-from .core.config import settings, logger
-from .core.database import connect_to_mongo, close_mongo_connection, init_default_settings, client
-from .middleware.security import SecurityHeadersMiddleware
-from .middleware.rate_limiter import RateLimiter
+from app.config.settings import settings
+from app.management.db import init_db
+from app.middleware.rate_limiter import RateLimiter
+from app.middleware.security import SecurityHeadersMiddleware
+from app.utils.logger import logger
+from app.routers import auth, events, bookings, analytics
+# Import db
+from .app.db.mongodb import connect_to_mongo, close_mongo_connection, client, engine
 
-# Import routers
-from .routers import auth, events, bookings
+# Import middleware
+from .app.middleware.security import SecurityHeadersMiddleware
+from .app.middleware.rate_limiter import RateLimiter
 
-# Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.PROJECT_DESCRIPTION,
@@ -59,11 +62,12 @@ app.add_middleware(
     exempted_ips=["127.0.0.1"]
 )
 
-# Create uploads directory if it doesn't exist
-uploads_dir = Path(__file__).parent / "static" / "uploads"
+# Create uploads directory if it doesn't exist in app folder
+uploads_dir = Path(__file__).parent / "app" / "static" / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 
 # Middleware for request ID and logging
+
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     """
@@ -135,18 +139,20 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # Mount static files directory for uploads
-app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")
+app.mount("/static", StaticFiles(directory=str(uploads_dir.parent)), name="static")  # Use parent to mount the root static folder
 
 # Startup and shutdown events
+from .app.management.db import init_db
 @app.on_event("startup")
 async def startup_db_client():
     """Connect to MongoDB on startup."""
     logger.info(f"Starting up {settings.PROJECT_NAME} server...")
     await connect_to_mongo()
-    init_default_settings()
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+
     """Close MongoDB connection on shutdown."""
     logger.info(f"Shutting down {settings.PROJECT_NAME} server...")
     await close_mongo_connection()
@@ -156,6 +162,7 @@ api_prefix = settings.API_V1_STR
 app.include_router(auth.router, prefix=api_prefix)
 app.include_router(events.router, prefix=api_prefix)
 app.include_router(bookings.router, prefix=api_prefix)
+app.include_router(analytics.router, prefix=api_prefix)
 
 # Health check endpoint
 @app.get(f"{api_prefix}/health", tags=["system"])
@@ -163,11 +170,21 @@ async def health_check():
     """Health check endpoint to verify the API is running and connected to the database."""
     try:
         # Check MongoDB connection
-        await client.admin.command("ping")
-        return {
-            "status": "ok", 
-            "db": "connected",
-            "version": settings.PROJECT_VERSION
+        db_check = await client.admin.command("ping")
+
+        # Check if settings are initialized
+        try:
+            settings_check = await init_db(engine)
+
+        except Exception as e:
+            raise HTTPException(500, f"Error initializing settings: {str(e)}")
+
+        if db_check["ok"] == 1:
+            return {
+                "status": "ok",
+                "db": "connected",
+                "db_settings": "initialized" if settings_check else "not initialized",
+                "version": settings.PROJECT_VERSION
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")

@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 import uuid
 
@@ -71,6 +71,7 @@ class BookingList(BaseModel):
     bookings: List[BookingResponse]
     total: int
 
+
 class BookingDetails(BookingResponse):
     event_details: Dict[str, Any]
 
@@ -83,3 +84,9 @@ class BookingStatusUpdate(BaseModel):
         if v not in valid_statuses:
             raise ValueError(f"Status must be one of {valid_statuses}")
         return v 
+
+class BookingSchema(BaseModel):
+    user_id: str
+    event_id: str
+    quantity: int
+    created_at: datetime
