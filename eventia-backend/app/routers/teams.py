@@ -1,24 +1,26 @@
 """
-Teams router
------------
-API endpoints for teams
+Team routes
+----------
+API endpoints for team operations
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, status, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from ..schemas.team import (
-    TeamCreate, 
-    TeamUpdate, 
-    TeamInDB, 
-    TeamResponse, 
+    TeamCreate,
+    TeamUpdate,
+    TeamResponse,
     TeamListResponse,
     TeamSearchParams
 )
 from ..controllers.team_controller import TeamController
 from ..middleware.auth import get_current_user, get_admin_user
 from ..utils.logger import logger
+from ..utils.file import save_upload_file
+from ..config import settings
 
 # Create router
 router = APIRouter(
@@ -35,9 +37,9 @@ router = APIRouter(
     description="Get a list of teams with optional filtering and pagination"
 )
 async def get_teams(
+    search: Optional[str] = Query(None, description="Search by name or code"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    search: Optional[str] = Query(None, description="Search in name and code"),
     sort: Optional[str] = Query("name", description="Field to sort by"),
     order: Optional[str] = Query("asc", description="Sort order (asc or desc)")
 ):
@@ -47,9 +49,9 @@ async def get_teams(
     try:
         # Create search params
         params = TeamSearchParams(
+            search=search,
             page=page,
             limit=limit,
-            search=search,
             sort=sort,
             order=order
         )
@@ -107,20 +109,20 @@ async def get_team(
 
 
 @router.get(
-    "/code/{team_code}",
+    "/code/{code}",
     response_model=TeamResponse,
     summary="Get team by code",
-    description="Get a single team by its code (e.g., CSK, MI)"
+    description="Get a single team by its code"
 )
 async def get_team_by_code(
-    team_code: str = Path(..., description="Team code")
+    code: str = Path(..., description="Team code")
 ):
     """
     Get a single team by its code
     """
     try:
         # Get team from controller
-        team = await TeamController.get_team_by_code(team_code)
+        team = await TeamController.get_team_by_code(code)
         
         # Return response
         return {
@@ -178,6 +180,73 @@ async def create_team(
         )
 
 
+@router.post(
+    "/{team_id}/logo",
+    response_model=TeamResponse,
+    summary="Upload team logo",
+    description="Upload a logo for a team (admin only)",
+    dependencies=[Depends(get_admin_user)]
+)
+async def upload_team_logo(
+    team_id: str = Path(..., description="Team ID"),
+    file: UploadFile = File(..., description="Logo image file")
+):
+    """
+    Upload a logo for a team (admin only)
+    """
+    try:
+        # Validate team ID
+        if not team_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Team ID is required"
+            )
+        
+        # Get team to verify it exists
+        team = await TeamController.get_team(team_id)
+        
+        # Check file extension
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+        file_ext = '.' + file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File extension not allowed. Allowed extensions: {', '.join(allowed_extensions)}"
+            )
+        
+        # Generate filename and path
+        filename = f"{team['code'].lower()}_logo{file_ext}"
+        filepath = settings.STATIC_TEAMS_PATH / filename
+        
+        # Save file
+        async with open(filepath, 'wb') as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Update team with new logo URL
+        logo_url = f"{settings.STATIC_URL}/teams/{filename}"
+        update_data = TeamUpdate(logo_url=logo_url)
+        
+        # Update team
+        updated_team = await TeamController.update_team(team_id, update_data)
+        
+        # Return response
+        return {
+            "data": updated_team,
+            "message": "Team logo uploaded successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload_team_logo: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload team logo: {str(e)}"
+        )
+
+
 @router.put(
     "/{team_id}",
     response_model=TeamResponse,
@@ -220,6 +289,7 @@ async def update_team(
 
 @router.delete(
     "/{team_id}",
+    response_model=dict,
     summary="Delete team",
     description="Delete a team (admin only)",
     dependencies=[Depends(get_admin_user)]
@@ -244,38 +314,4 @@ async def delete_team(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
-        )
-
-
-@router.post(
-    "/{team_id}/logo",
-    response_model=TeamResponse,
-    summary="Upload team logo",
-    description="Upload logo for a team (admin only)",
-    dependencies=[Depends(get_admin_user)]
-)
-async def upload_team_logo(
-    team_id: str = Path(..., description="Team ID"),
-    file: UploadFile = File(..., description="Team logo image file")
-):
-    """
-    Upload logo for a team (admin only)
-    """
-    try:
-        # Upload logo using controller
-        updated_team = await TeamController.upload_team_logo(team_id, file)
-        
-        # Return response
-        return {
-            "data": updated_team,
-            "message": "Team logo uploaded successfully"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in upload_team_logo: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload team logo: {str(e)}"
         )
