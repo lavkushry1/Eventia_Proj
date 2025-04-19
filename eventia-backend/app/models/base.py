@@ -23,7 +23,7 @@ class PyObjectId(ObjectId):
             raise ValueError("Invalid ObjectId")
         return ObjectId(v)
     
-    # Replacing outdated Pydantic v1 method with Pydantic v2 method
+    # Updated for Pydantic v2 compatibility
     @classmethod
     def __get_pydantic_json_schema__(cls, _schema_generator, _field):
         return {"type": "string"}
@@ -36,10 +36,11 @@ class MongoBaseModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
+    model_config = {
+        "validate_by_name": True,  # Replaces allow_population_by_field_name
+        "arbitrary_types_allowed": True,
+        "json_encoders": {ObjectId: str}
+    }
     
     @classmethod
     def get_indexes(cls) -> list:
@@ -49,11 +50,11 @@ class MongoBaseModel(BaseModel):
     @classmethod
     def get_collection_name(cls) -> str:
         """Get the collection name for this model"""
-        return getattr(cls.Config, "collection_name", cls.__name__.lower())
+        return getattr(cls.model_config, "collection_name", cls.__name__.lower())
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dict with correct field names"""
-        data = self.dict(by_alias=True)
+        data = self.model_dump(by_alias=True)  # Updated from dict() to model_dump()
         # Convert ObjectId to string
         for key, value in data.items():
             if isinstance(value, ObjectId):

@@ -23,6 +23,6 @@ class PyObjectId(ObjectId):
         return ObjectId(v)
     
     @classmethod
-    def __modify_schema__(cls, field_schema):
-        """Modify the schema to represent ObjectId as string"""
-        field_schema.update(type="string") 
+    def __get_pydantic_json_schema__(cls, _schema_generator, _field):
+        """Modify the schema to represent ObjectId as string - Updated for Pydantic v2"""
+        return {"type": "string"}

@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/Users/lavkushkumar/Desktop/untitled folder/Eventia_Proj/eventia-backend/.venv/bin/python3.13" "$0" "$@"
+'''exec' "/Users/lavkushkumar/Desktop/untitled folder/Eventia_Proj/eventia-backend/.venv/bin/python3.12" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re

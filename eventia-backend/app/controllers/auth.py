@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.config import settings
-from app.db.mongodb import database
+from app.db.mongodb import database, get_collection
 from app.schemas.users import UserCreate, UserInDB, UserResponse, TokenData
 from app.utils.security import generate_random_token
 
@@ -21,12 +21,13 @@ from app.utils.security import generate_random_token
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
-# Database collections
-users_collection = database.get_collection("users")
-
+# Get database collections - Fixed to use async function
+async def get_users_collection():
+    return await get_collection("users")
 
 async def get_user_by_email(email: str) -> Optional[UserInDB]:
     """Retrieve a user by email"""
+    users_collection = await get_users_collection()
     user_data = await users_collection.find_one({"email": email})
     if user_data:
         return UserInDB(**user_data)
@@ -35,6 +36,7 @@ async def get_user_by_email(email: str) -> Optional[UserInDB]:
 
 async def get_user_by_id(user_id: str) -> Optional[UserInDB]:
     """Retrieve a user by ID"""
+    users_collection = await get_users_collection()
     user_data = await users_collection.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return UserInDB(**user_data)
@@ -102,6 +104,7 @@ async def create_user(user_data: UserCreate) -> UserResponse:
         updated_at=datetime.datetime.utcnow()
     )
     
+    users_collection = await get_users_collection()
     result = await users_collection.insert_one(new_user.dict(by_alias=True))
     
     created_user = await get_user_by_id(result.inserted_id)
@@ -166,6 +169,7 @@ async def request_password_reset(email: str) -> None:
     reset_token = generate_random_token()
     expiration = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
     
+    users_collection = await get_users_collection()
     # Store token in database
     await users_collection.update_one(
         {"_id": user.id},
@@ -185,6 +189,7 @@ async def request_password_reset(email: str) -> None:
 
 async def reset_password(token: str, new_password: str) -> bool:
     """Reset user password using reset token"""
+    users_collection = await get_users_collection()
     # Find user with valid token
     user_data = await users_collection.find_one({
         "reset_token": token,
@@ -210,4 +215,4 @@ async def reset_password(token: str, new_password: str) -> bool:
         }
     )
     
-    return True 
+    return True

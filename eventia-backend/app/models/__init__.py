@@ -3,15 +3,7 @@ Models package containing Pydantic models for data validation and serialization.
 """
 
 from app.models.event import (
-    Team,
-    Venue,
-    TicketType,
-    EventBase,
-    EventCreate,
-    EventInDB,
-    EventUpdate,
-    EventResponse,
-    EventList,
+    EventModel,
 )
 
 from app.models.booking import (
@@ -60,15 +52,7 @@ from app.models.payment import (
 
 __all__ = [
     # Event models
-    "Team",
-    "Venue",
-    "TicketType",
-    "EventBase",
-    "EventCreate",
-    "EventInDB",
-    "EventUpdate",
-    "EventResponse",
-    "EventList",
+    "EventModel",
     
     # Booking models
     "PaymentStatus",
@@ -110,4 +94,4 @@ __all__ = [
     "PaymentSettingsResponse",
     "PaymentSettingsUpdate",
     "UpiUpdateRequest",
-] 
+]

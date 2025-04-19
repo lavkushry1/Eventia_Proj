@@ -7,14 +7,8 @@ configuration from .env file or env vars
 """
 
 import os
-import json
-from pathlib import Path
-from typing import List, Optional, Union, Any
+from typing import List, Optional
 from pydantic_settings import BaseSettings
-
-
-# Base path for application
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -32,15 +26,19 @@ class Settings(BaseSettings):
     API_DOMAIN: str = "localhost"
 
     # CORS configuration
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    
+    # Logging configuration
+    LOG_LEVEL: str = "DEBUG"
+    ROOT_PATH: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     # MongoDB configuration
-    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_URL: Optional[str] = "mongodb://localhost:27017"
     MONGODB_DB: str = "eventia"
 
     # For backward compatibility
-    MONGO_URI: str = "mongodb://localhost:27017"
-    DATABASE_NAME: str = "eventia"
+    MONGO_URI: Optional[str] = None
+    DATABASE_NAME: Optional[str] = None
 
     # JWT Authentication
     JWT_SECRET_KEY: str = "supersecretkey123"
@@ -55,9 +53,6 @@ class Settings(BaseSettings):
     # Documentation
     ENABLE_DOCS: bool = True
 
-    # Path configuration
-    ROOT_PATH: Path = BASE_DIR
-    
     # File paths
     UPLOADS_PATH: str = "app/static/uploads"
     STATIC_DIR: str = "app/static"
@@ -74,7 +69,6 @@ class Settings(BaseSettings):
     PAYMENT_ENABLED: bool = True
     DEFAULT_MERCHANT_NAME: str = "Eventia Ticketing"
     DEFAULT_VPA: str = "eventia@axis"
-    DEFAULT_UPI_VPA: str = "eventia@axis"  # Added for compatibility with .env
     MERCHANT_NAME: str = "Eventia Ticketing"
     VPA_ADDRESS: str = "eventia@axis"
     DEFAULT_CURRENCY: str = "INR"
@@ -90,32 +84,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     TESTING: bool = False
 
-    # Logging
-    LOG_LEVEL: str = "INFO"
-    LOG_FILE: Optional[str] = None
-
-    @classmethod
-    def _process_cors_origins(cls, v: Any) -> List[str]:
-        """Process CORS_ORIGINS to handle string or list."""
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, str):
-            try:
-                return json.loads(v)
-            except json.JSONDecodeError:
-                return [v]
-        return v
-
-    model_config = {
-        "env_file": '.env',
-        "case_sensitive": False,
-        "extra": "ignore",  # Allow extra fields in config without raising validation errors
-        "json_schema_extra": {
-            "field_processors": {
-                "CORS_ORIGINS": _process_cors_origins
-            }
-        }
-    }
+    class Config:
+        env_file = '.env'
+        case_sensitive = False
+        extra = "ignore"  # Allow extra fields in config without raising validation errors
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -124,10 +96,6 @@ class Settings(BaseSettings):
             self.MONGO_URI = self.MONGODB_URL
         if self.DATABASE_NAME is None:
             self.DATABASE_NAME = self.MONGODB_DB
-
-        # Handle CORS_ORIGINS if it's a string
-        if isinstance(self.CORS_ORIGINS, str):
-            self.CORS_ORIGINS = self._process_cors_origins(self.CORS_ORIGINS)
 
 # instantiate settings for use throughout the app
 settings = Settings()

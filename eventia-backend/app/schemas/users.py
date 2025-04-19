@@ -80,6 +80,9 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
 
+# Alias for TokenResponse for backward compatibility
+Token = TokenResponse
+
 class TokenData(BaseModel):
     """JWT token data"""
     sub: str
@@ -126,4 +129,4 @@ class TokenData(BaseModel):
     """Schema for authentication token data."""
     access_token: str
     token_type: str
-    user: Dict[str, Any] 
+    user: Dict[str, Any]

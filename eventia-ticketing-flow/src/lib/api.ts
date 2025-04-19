@@ -40,7 +40,7 @@ interface TeamQueryParams {
 }
 
 // Create axios instance with default configuration
-const api = axios.create({
+export const api = axios.create({
   baseURL: configManager.getApiUrl(''),
   headers: {
     'Content-Type': 'application/json',
@@ -75,17 +75,17 @@ api.interceptors.response.use(
 // Handle image URLs to ensure they have proper base URL
 export const getImageUrl = (path: string | undefined | null): string => {
   if (!path) return '';
-  
+
   // Return as is if it's already an absolute URL
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  
+
   // Add API_BASE_URL if it's a relative path
   if (path.startsWith('/')) {
     return configManager.getApiUrl(path);
   }
-  
+
   // Add static path for other cases
   return `${configManager.getConfig().STATIC_URL}/${path}`;
 };
@@ -93,7 +93,7 @@ export const getImageUrl = (path: string | undefined | null): string => {
 // Event API calls
 export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventList> => {
   const { data } = await api.get('/api/events', { params });
-  
+
   // Process image URLs in the response
   data.events = data.events.map((event: EventResponse) => ({
     ...event,
@@ -101,13 +101,13 @@ export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventL
     teamOneLogo: event.teamOneLogo ? getImageUrl(event.teamOneLogo) : '',
     teamTwoLogo: event.teamTwoLogo ? getImageUrl(event.teamTwoLogo) : '',
   }));
-  
+
   return data;
 };
 
 export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
   const { data } = await api.get(`/api/events/${eventId}`);
-  
+
   // Process image URLs
   return {
     ...data,
@@ -120,7 +120,7 @@ export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
 // Stadium API calls
 export const fetchStadiums = async (params: StadiumQueryParams = {}): Promise<StadiumList> => {
   const { data } = await api.get('/api/stadiums', { params });
-  
+
   // Process image URLs
   data.stadiums = data.stadiums.map((stadium: Stadium) => ({
     ...stadium,
@@ -134,13 +134,13 @@ export const fetchStadiums = async (params: StadiumQueryParams = {}): Promise<St
       })),
     })),
   }));
-  
+
   return data;
 };
 
 export const fetchStadium = async (stadiumId: string): Promise<Stadium> => {
   const { data } = await api.get(`/api/stadiums/${stadiumId}`);
-  
+
   // Process image URLs
   return {
     ...data,
@@ -158,26 +158,26 @@ export const fetchStadium = async (stadiumId: string): Promise<Stadium> => {
 
 export const fetchSeatViewImages = async (stadiumId: string, sectionId: string): Promise<SeatViewImageList> => {
   const { data } = await api.get(`/api/stadiums/${stadiumId}/sections/${sectionId}/views`);
-  
+
   // Process image URLs
   data.views = data.views.map(view => ({
     ...view,
     image_url: getImageUrl(view.image_url),
   }));
-  
+
   return data;
 };
 
 // Team API calls
 export const fetchTeams = async (params: TeamQueryParams = {}): Promise<TeamList> => {
   const { data } = await api.get('/api/teams', { params });
-  
+
   // Process logo URLs
   data.teams = data.teams.map(team => ({
     ...team,
     logo: getImageUrl(team.logo),
   }));
-  
+
   return data;
 };
 
@@ -189,12 +189,12 @@ export const createBooking = async (bookingData: BookingRequest): Promise<Bookin
 
 export const fetchBooking = async (bookingId: string): Promise<BookingResponse> => {
   const { data } = await api.get(`/api/bookings/${bookingId}`);
-  
+
   // Process QR code URL if present
   if (data.qr_code) {
     data.qr_code = getImageUrl(data.qr_code);
   }
-  
+
   return data;
 };
 
@@ -206,22 +206,22 @@ export const verifyPayment = async (paymentData: PaymentRequest): Promise<Paymen
 
 export const fetchPaymentSettings = async (): Promise<PaymentSettingsResponse> => {
   const { data } = await api.get('/api/payments/settings');
-  
+
   // Process QR image URL
   data.qr_image = getImageUrl(data.qr_image);
-  
+
   return data;
 };
 
 // Admin API calls
 export const adminLogin = async (credentials: AdminLoginRequest): Promise<AdminLoginResponse> => {
   const { data } = await api.post('/api/admin/login', credentials);
-  
+
   // Store token in localStorage
   if (data.token) {
     localStorage.setItem('admin_token', data.token);
   }
-  
+
   return data;
 };
 
