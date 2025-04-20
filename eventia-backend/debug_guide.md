@@ -33,7 +33,7 @@ The `/metrics` endpoint provides Prometheus-compatible metrics:
 - Request counts and error rates
 - Function execution times
 
-Access the metrics at: `http://localhost:3002/metrics`
+Access the metrics at: `http://localhost:3000/metrics`
 
 ## 3. Health Checks
 
@@ -43,7 +43,7 @@ The `/health` endpoint provides application health information:
 - Database connection status and latency
 - Memory usage statistics
 
-Access the health check at: `http://localhost:3002/health`
+Access the health check at: `http://localhost:3000/health`
 
 ## 4. Memory Profiling
 
@@ -67,13 +67,13 @@ A Locust configuration is included for load testing:
 ```bash
 # Run load test against local server with 1000 users
 cd eventia-backend
-python -m locust -f tests/locustfile.py --host=http://localhost:3002 --users=1000 --spawn-rate=10
+python -m locust -f tests/locustfile.py --host=http://localhost:3000 --users=1000 --spawn-rate=10
 ```
 
 For headless mode:
 
 ```bash
-python -m locust -f tests/locustfile.py --host=http://localhost:3002 --users=1000 --spawn-rate=10 --run-time=5m --headless --html=locust-report.html
+python -m locust -f tests/locustfile.py --host=http://localhost:3000 --users=1000 --spawn-rate=10 --run-time=5m --headless --html=locust-report.html
 ```
 
 ## 6. End-to-End Testing
@@ -124,12 +124,12 @@ The GitHub Actions workflow runs all tests automatically:
 
 2. Check memory usage:
    ```
-   curl http://localhost:3002/health | jq .memory
+   curl http://localhost:3000/health | jq .memory
    ```
 
 3. Check slow endpoints:
    ```
-   curl http://localhost:3002/metrics | grep "api_endpoint_response_time_ms"
+   curl http://localhost:3000/metrics | grep "api_endpoint_response_time_ms"
    ```
 
 ### Frontend Issues

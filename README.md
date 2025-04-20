@@ -738,7 +738,7 @@ The Eventia Ticketing Platform can be deployed using Docker containers for both 
    ```
 3. The services will be available at:
    - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3002/api
+   - Backend API: http://localhost:3000/api
    - MongoDB: localhost:27017
 
 ### Production Environment

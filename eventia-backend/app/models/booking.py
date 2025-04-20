@@ -89,3 +89,6 @@ BookingInDB = MongoBaseModel
 BookingResponse = MongoBaseModel
 BookingUpdate = MongoBaseModel
 BookingList = MongoBaseModel
+
+# Add Booking class alias for backward compatibility
+Booking = BookingModel

@@ -52,7 +52,7 @@ class BookingBase(BaseModel):
     selected_seats: Optional[List[SelectedSeat]] = None
     stadium_id: Optional[str] = None
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_booking_selections(cls, values):
         booking_type = values.get('booking_type')
         selected_tickets = values.get('selected_tickets')

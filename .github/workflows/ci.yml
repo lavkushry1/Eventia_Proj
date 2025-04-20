@@ -52,7 +52,7 @@ jobs:
         cd eventia-backend
         python flask_server.py &
         sleep 5
-        python -m locust -f tests/locustfile.py --host=http://localhost:3002 --users=50 --spawn-rate=10 --run-time=30s --headless --html=locust-report.html
+        python -m locust -f tests/locustfile.py --host=http://localhost:3000 --users=50 --spawn-rate=10 --run-time=30s --headless --html=locust-report.html
     
     - name: Upload performance test results
       uses: actions/upload-artifact@v3

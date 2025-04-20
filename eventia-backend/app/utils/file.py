@@ -70,3 +70,47 @@ def get_placeholder_image(category: str) -> str:
     
     placeholder = placeholders.get(category, "default-placeholder.jpg")
     return f"{settings.STATIC_URL}/placeholders/{placeholder}"
+
+
+async def save_upload_file(upload_file, folder: str, filename: Optional[str] = None) -> str:
+    """
+    Save an uploaded file to the specified folder
+    
+    Args:
+        upload_file: The UploadFile from FastAPI
+        folder: Folder name within static directory to save the file
+        filename: Optional filename to use (if None, uses the original filename)
+        
+    Returns:
+        str: The URL path to the saved file
+    """
+    try:
+        # Determine target folder path
+        target_folder = Path(settings.STATIC_DIR) / folder
+        
+        # Create folder if it doesn't exist
+        os.makedirs(target_folder, exist_ok=True)
+        
+        # Determine filename
+        if not filename:
+            filename = upload_file.filename
+        
+        # Ensure unique filename by adding timestamp if file exists
+        file_path = target_folder / filename
+        if file_path.exists():
+            import time
+            name, ext = os.path.splitext(filename)
+            filename = f"{name}_{int(time.time())}{ext}"
+            file_path = target_folder / filename
+        
+        # Save the file
+        contents = await upload_file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        # Return relative URL path
+        return f"{folder}/{filename}"
+    
+    except Exception as e:
+        logger.error(f"Error saving uploaded file: {str(e)}")
+        return ""

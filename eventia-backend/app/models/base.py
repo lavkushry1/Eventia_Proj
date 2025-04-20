@@ -7,7 +7,7 @@ Base classes for all MongoDB models
 from typing import Any, Dict, Optional
 from datetime import datetime
 from bson import ObjectId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class PyObjectId(ObjectId):
@@ -23,7 +23,6 @@ class PyObjectId(ObjectId):
             raise ValueError("Invalid ObjectId")
         return ObjectId(v)
     
-    # Updated for Pydantic v2 compatibility
     @classmethod
     def __get_pydantic_json_schema__(cls, _schema_generator, _field):
         return {"type": "string"}
@@ -36,11 +35,14 @@ class MongoBaseModel(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    model_config = {
-        "validate_by_name": True,  # Replaces allow_population_by_field_name
-        "arbitrary_types_allowed": True,
-        "json_encoders": {ObjectId: str}
-    }
+    model_config = ConfigDict(
+        validate_by_name=True,  # Replaces allow_population_by_field_name
+        arbitrary_types_allowed=True,
+        json_encoders={ObjectId: str},
+        populate_by_name=True,  # For backward compatibility
+        from_attributes=True,  # Replaces orm_mode
+        extra="ignore"  # Allow extra fields without validation errors
+    )
     
     @classmethod
     def get_indexes(cls) -> list:
@@ -54,7 +56,7 @@ class MongoBaseModel(BaseModel):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dict with correct field names"""
-        data = self.model_dump(by_alias=True)  # Updated from dict() to model_dump()
+        data = self.model_dump(by_alias=True)
         # Convert ObjectId to string
         for key, value in data.items():
             if isinstance(value, ObjectId):

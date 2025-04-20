@@ -18,7 +18,7 @@ from ..schemas.stadium import (
     SectionSearchParams,
     AvailabilityParams
 )
-from ..models.stadium import Stadium, Section
+from ..models.stadium import StadiumModel, StadiumSectionModel
 from ..utils.logger import logger
 from ..services.database import Database
 
@@ -61,7 +61,7 @@ class StadiumController:
                 sort=[(params.sort, sort_direction)]
             )
             
-            # Convert to list
+            # Convert to list of StadiumModel instances
             stadium_list = []
             for stadium in stadiums:
                 # Calculate total available seats across all sections
@@ -72,8 +72,9 @@ class StadiumController:
                 # Add available seats to stadium
                 stadium["available_seats"] = available_seats
                 
-                # Add to list
-                stadium_list.append(stadium)
+                # Convert to StadiumModel
+                stadium_model = StadiumModel(**stadium)
+                stadium_list.append(stadium_model.model_dump())
             
             # Construct response
             response = {
@@ -107,7 +108,9 @@ class StadiumController:
                     detail=f"Stadium with ID {stadium_id} not found"
                 )
             
-            return stadium
+            # Convert to StadiumModel
+            stadium_model = StadiumModel(**stadium)
+            return stadium_model.model_dump()
         
         except HTTPException:
             raise
@@ -132,7 +135,9 @@ class StadiumController:
                     detail=f"Stadium with code {code} not found"
                 )
             
-            return stadium
+            # Convert to StadiumModel
+            stadium_model = StadiumModel(**stadium)
+            return stadium_model.model_dump()
         
         except HTTPException:
             raise
@@ -156,7 +161,7 @@ class StadiumController:
                 )
             
             # Convert stadium data to dict
-            stadium_dict = stadium_data.dict()
+            stadium_dict = stadium_data.model_dump()
             
             # Process sections if provided
             if "sections" in stadium_dict and stadium_dict["sections"]:
@@ -178,8 +183,11 @@ class StadiumController:
                 "updated_at": now
             }
             
+            # Create StadiumModel instance
+            stadium_model = StadiumModel(**stadium)
+            
             # Insert stadium
-            result = await Database.insert_one("stadiums", stadium)
+            result = await Database.insert_one("stadiums", stadium_model.model_dump())
             
             # Check if insert was successful
             if not result:
@@ -188,7 +196,7 @@ class StadiumController:
                     detail="Failed to create stadium"
                 )
             
-            return stadium
+            return stadium_model.model_dump()
         
         except HTTPException:
             raise
@@ -217,7 +225,7 @@ class StadiumController:
                     )
             
             # Convert update data to dict, remove None values
-            update_dict = {k: v for k, v in stadium_data.dict().items() if v is not None}
+            update_dict = {k: v for k, v in stadium_data.model_dump().items() if v is not None}
             
             # Add updated_at timestamp
             update_dict["updated_at"] = datetime.utcnow()
@@ -239,7 +247,9 @@ class StadiumController:
             # Get updated stadium
             updated_stadium = await StadiumController.get_stadium(stadium_id)
             
-            return updated_stadium
+            # Convert to StadiumModel
+            stadium_model = StadiumModel(**updated_stadium)
+            return stadium_model.model_dump()
         
         except HTTPException:
             raise
@@ -290,55 +300,37 @@ class StadiumController:
     async def add_section(stadium_id: str, section_data: SectionCreate) -> Dict[str, Any]:
         """Add a new section to a stadium"""
         try:
-            # Get existing stadium
-            existing_stadium = await StadiumController.get_stadium(stadium_id)
+            # Get stadium
+            stadium = await StadiumController.get_stadium(stadium_id)
             
-            # Check if section with same name already exists
-            for section in existing_stadium.get("sections", []):
-                if section.get("name") == section_data.name:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=f"Section with name {section_data.name} already exists in this stadium"
-                    )
-            
-            # Convert section data to dict
-            section_dict = section_data.dict()
-            
-            # Generate section data
-            now = datetime.utcnow()
-            section = {
+            # Create section model
+            section_dict = section_data.model_dump()
+            section_dict.update({
                 "id": str(uuid.uuid4()),
-                **section_dict,
-                "available": section_dict["capacity"],  # Set available seats equal to capacity initially
-                "created_at": now,
-                "updated_at": now
-            }
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+                "available": section_dict["capacity"]  # Initially all seats are available
+            })
+            
+            # Create StadiumSectionModel instance
+            section_model = StadiumSectionModel(**section_dict)
             
             # Add section to stadium
             result = await Database.update_one(
                 "stadiums",
                 {"_id": stadium_id},
-                {"$push": {"sections": section}}
+                {"$push": {"sections": section_model.model_dump()}}
             )
             
             # Check if update was successful
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to add section to stadium"
+                    detail="Failed to add section"
                 )
-            
-            # Update stadium capacity
-            total_capacity = existing_stadium.get("capacity", 0) + section_dict["capacity"]
-            await Database.update_one(
-                "stadiums",
-                {"_id": stadium_id},
-                {"$set": {"capacity": total_capacity, "updated_at": now}}
-            )
             
             # Get updated stadium
             updated_stadium = await StadiumController.get_stadium(stadium_id)
-            
             return updated_stadium
         
         except HTTPException:
@@ -354,49 +346,35 @@ class StadiumController:
     async def update_section(stadium_id: str, section_id: str, section_data: SectionUpdate) -> Dict[str, Any]:
         """Update a section in a stadium"""
         try:
-            # Get existing stadium
-            existing_stadium = await StadiumController.get_stadium(stadium_id)
+            # Get stadium
+            stadium = await StadiumController.get_stadium(stadium_id)
             
-            # Find the section to update
+            # Find section
             section_index = None
-            old_capacity = 0
-            for i, section in enumerate(existing_stadium.get("sections", [])):
+            for i, section in enumerate(stadium.get("sections", [])):
                 if section.get("id") == section_id:
                     section_index = i
-                    old_capacity = section.get("capacity", 0)
                     break
             
-            # Check if section exists
             if section_index is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Section with ID {section_id} not found in stadium with ID {stadium_id}"
+                    detail=f"Section with ID {section_id} not found in stadium {stadium_id}"
                 )
             
-            # Check if section name is being updated and if new name already exists
-            if section_data.name and section_data.name != existing_stadium["sections"][section_index]["name"]:
-                for section in existing_stadium.get("sections", []):
-                    if section.get("name") == section_data.name and section.get("id") != section_id:
-                        raise HTTPException(
-                            status_code=status.HTTP_409_CONFLICT,
-                            detail=f"Section with name {section_data.name} already exists in this stadium"
-                        )
+            # Update section data
+            section = stadium["sections"][section_index]
+            section.update(section_data.model_dump(exclude_unset=True))
+            section["updated_at"] = datetime.utcnow()
             
-            # Convert update data to dict, remove None values
-            update_dict = {k: v for k, v in section_data.dict().items() if v is not None}
-            
-            # Add updated_at timestamp
-            update_dict["updated_at"] = datetime.utcnow()
+            # Create StadiumSectionModel instance
+            section_model = StadiumSectionModel(**section)
             
             # Update section in stadium
-            update_fields = {}
-            for key, value in update_dict.items():
-                update_fields[f"sections.{section_index}.{key}"] = value
-            
             result = await Database.update_one(
                 "stadiums",
-                {"_id": stadium_id, f"sections.id": section_id},
-                {"$set": update_fields}
+                {"_id": stadium_id, "sections.id": section_id},
+                {"$set": {"sections.$": section_model.model_dump()}}
             )
             
             # Check if update was successful
@@ -406,22 +384,8 @@ class StadiumController:
                     detail="Failed to update section"
                 )
             
-            # Update stadium capacity if section capacity changed
-            if "capacity" in update_dict:
-                new_capacity = update_dict["capacity"]
-                capacity_diff = new_capacity - old_capacity
-                
-                if capacity_diff != 0:
-                    total_capacity = existing_stadium.get("capacity", 0) + capacity_diff
-                    await Database.update_one(
-                        "stadiums",
-                        {"_id": stadium_id},
-                        {"$set": {"capacity": total_capacity, "updated_at": datetime.utcnow()}}
-                    )
-            
             # Get updated stadium
             updated_stadium = await StadiumController.get_stadium(stadium_id)
-            
             return updated_stadium
         
         except HTTPException:

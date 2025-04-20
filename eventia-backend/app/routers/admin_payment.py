@@ -22,10 +22,10 @@ router = APIRouter(
 
 # In-memory store until database setup
 _payment_settings = PaymentSettingsResponse(
-    merchant_name=settings.default_merchant_name,
-    vpa=settings.default_vpa,
-    vpaAddress=settings.default_vpa,
-    isPaymentEnabled=settings.payment_enabled,
+    merchant_name=settings.DEFAULT_MERCHANT_NAME,
+    vpa=settings.DEFAULT_VPA,
+    vpaAddress=settings.DEFAULT_VPA,
+    isPaymentEnabled=settings.PAYMENT_ENABLED,
     payment_mode="vpa",
     qrImageUrl=None,
     type="payment_settings",

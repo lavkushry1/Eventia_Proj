@@ -2,7 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field as PydanticField, validator
+from odmantic import Model, Field
+from bson import ObjectId
+from .base import PyObjectId, MongoBaseModel
 
 
 class PaymentMethod(str, Enum):
@@ -26,10 +29,10 @@ class PaymentGateway(str, Enum):
 
 class UpiSettings(BaseModel):
     """UPI payment settings model"""
-    merchant_name: str = Field(..., description="Name of the merchant for UPI")
-    vpa: str = Field(..., description="Virtual Payment Address (UPI ID)")
-    description: Optional[str] = Field(None, description="Description to show in UPI payment apps")
-    qr_code_url: Optional[str] = Field(None, description="URL to QR code image")
+    merchant_name: str = PydanticField(..., description="Name of the merchant for UPI")
+    vpa: str = PydanticField(..., description="Virtual Payment Address (UPI ID)")
+    description: Optional[str] = PydanticField(None, description="Description to show in UPI payment apps")
+    qr_code_url: Optional[str] = PydanticField(None, description="URL to QR code image")
     
     @validator('vpa')
     def validate_vpa(cls, v):
@@ -51,9 +54,9 @@ class GatewaySettings(BaseModel):
 
 class PaymentSettingsBase(BaseModel):
     """Base payment settings model with common fields"""
-    active_methods: List[PaymentMethod] = Field([PaymentMethod.UPI], description="List of active payment methods")
-    default_method: PaymentMethod = Field(PaymentMethod.UPI, description="Default payment method")
-    default_currency: str = Field("INR", description="Default currency")
+    active_methods: List[PaymentMethod] = PydanticField([PaymentMethod.UPI], description="List of active payment methods")
+    default_method: PaymentMethod = PydanticField(PaymentMethod.UPI, description="Default payment method")
+    default_currency: str = PydanticField("INR", description="Default currency")
     upi_settings: Optional[UpiSettings] = None
     gateway_settings: Optional[List[GatewaySettings]] = None
 
@@ -65,10 +68,10 @@ class PaymentSettingsCreate(PaymentSettingsBase):
 
 class PaymentSettingsInDB(PaymentSettingsBase):
     """Payment settings model as stored in the database"""
-    settings_id: str = Field(..., description="Unique settings identifier")
-    created_at: datetime = Field(default_factory=datetime.now, description="When the settings were created")
-    updated_at: Optional[datetime] = Field(None, description="When the settings were last updated")
-    updated_by: Optional[str] = Field(None, description="User ID who last updated the settings")
+    settings_id: str = PydanticField(..., description="Unique settings identifier")
+    created_at: datetime = PydanticField(default_factory=datetime.now, description="When the settings were created")
+    updated_at: Optional[datetime] = PydanticField(None, description="When the settings were last updated")
+    updated_by: Optional[str] = PydanticField(None, description="User ID who last updated the settings")
     
     class Config:
         schema_extra = {
@@ -126,12 +129,35 @@ class PaymentSettingsUpdate(BaseModel):
 
 class UpiUpdateRequest(BaseModel):
     """UPI settings update request model"""
-    merchant_name: str = Field(..., description="Name of the merchant for UPI")
-    vpa: str = Field(..., description="Virtual Payment Address (UPI ID)")
-    description: Optional[str] = Field(None, description="Description to show in UPI payment apps")
+    merchant_name: str = PydanticField(..., description="Name of the merchant for UPI")
+    vpa: str = PydanticField(..., description="Virtual Payment Address (UPI ID)")
+    description: Optional[str] = PydanticField(None, description="Description to show in UPI payment apps")
     
     @validator('vpa')
     def validate_vpa(cls, v):
         if not v or "@" not in v:
             raise ValueError("VPA must be a valid UPI ID (e.g., username@upi)")
-        return v 
+        return v
+
+
+class PaymentModel(Model):
+    """MongoDB model for Payment collection"""
+    booking_id: str = Field(..., description="Associated booking ID")
+    amount: float = Field(..., description="Payment amount")
+    currency: str = Field(default="INR", description="Payment currency")
+    method: PaymentMethod = Field(..., description="Payment method used")
+    gateway: Optional[PaymentGateway] = Field(None, description="Payment gateway used")
+    transaction_id: Optional[str] = Field(None, description="Transaction ID from payment provider")
+    utr: Optional[str] = Field(None, description="UTR number for bank transfers")
+    status: str = Field(default="pending", description="Payment status")
+    verified: bool = Field(default=False, description="Whether payment is verified")
+    verification_method: Optional[str] = Field(None, description="How payment was verified")
+    verified_at: Optional[datetime] = Field(None, description="When payment was verified")
+    verified_by: Optional[str] = Field(None, description="User ID who verified payment")
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    
+    # Set collection name via class variable
+    model_config = {
+        "collection": "payments"
+    }

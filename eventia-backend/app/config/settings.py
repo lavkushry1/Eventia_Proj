@@ -8,7 +8,7 @@ configuration from .env file or env vars
 
 import os
 from typing import List, Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     # API configuration
     API_V1_STR: str = "/api/v1"
     API_HOST: str = "0.0.0.0"
-    API_PORT: int = 3003
+    API_PORT: int = 3000
     API_PREFIX: str = "/api"
-    API_BASE_URL: str = "http://localhost:3003"
+    API_BASE_URL: str = "http://localhost:3000"
     API_DOMAIN: str = "localhost"
 
     # CORS configuration
@@ -84,10 +84,11 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     TESTING: bool = False
 
-    class Config:
-        env_file = '.env'
-        case_sensitive = False
-        extra = "ignore"  # Allow extra fields in config without raising validation errors
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        case_sensitive=False,
+        extra="ignore"  # Allow extra fields in config without raising validation errors
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

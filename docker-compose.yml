@@ -13,7 +13,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - REACT_APP_API_URL=http://localhost:3002/api
+      - REACT_APP_API_URL=http://localhost:3000/api
     depends_on:
       - backend
     networks:
@@ -25,7 +25,7 @@ services:
       context: ./eventia-backend
       dockerfile: Dockerfile
     ports:
-      - "3002:3002"
+      - "3000:3000"
     volumes:
       - ./eventia-backend:/app
     environment:

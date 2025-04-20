@@ -17,8 +17,9 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str
     
-    class Config:
-        populate_by_name = True
+    model_config = {
+        "populate_by_name": True
+    }
 
 class UserCreate(UserBase):
     """User creation data"""
@@ -62,9 +63,9 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        populate_by_name = True
-        schema_extra = {
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
             "example": {
                 "id": "60d5e1d75a3b93d3c2f3c281",
                 "email": "user@example.com",
@@ -74,6 +75,7 @@ class UserResponse(UserBase):
                 "updated_at": "2023-01-01T00:00:00"
             }
         }
+    }
 
 class TokenResponse(BaseModel):
     """Schema for authentication token response"""
@@ -111,12 +113,13 @@ class UserInDB(UserBase):
     reset_token: Optional[str] = None
     reset_token_expires: Optional[datetime] = None
     
-    class Config:
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {
+    model_config = {
+        "validate_by_name": True,
+        "arbitrary_types_allowed": True,
+        "json_encoders": {
             ObjectId: str
         }
+    }
 
 # Schema for user list response
 class UserList(BaseModel):

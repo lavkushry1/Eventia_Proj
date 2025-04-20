@@ -78,7 +78,7 @@ python app/main.py
 python app/main.py
 
 # Run with Gunicorn (if installed)
-gunicorn wsgi:app -w 4 -b 0.0.0.0:3002
+gunicorn wsgi:app -w 4 -b 0.0.0.0:3000
 ```
 
 ## Future Improvements

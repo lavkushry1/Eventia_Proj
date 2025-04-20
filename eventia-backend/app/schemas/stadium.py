@@ -4,9 +4,10 @@ Stadium schemas
 Pydantic schemas for Stadium API requests and responses
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from bson import ObjectId
 
 from .base import PaginatedResponse, ApiResponse
 
@@ -20,6 +21,7 @@ class SectionBase(BaseModel):
     available: int = Field(..., description="Number of available seats")
     color: Optional[str] = Field(None, description="Color code for the section map")
     view_image_url: Optional[str] = Field(None, description="URL to section view image")
+    coordinates: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Section coordinates for mapping")
 
 
 class SectionCreate(SectionBase):
@@ -35,16 +37,41 @@ class SectionUpdate(BaseModel):
     available: Optional[int] = None
     color: Optional[str] = None
     view_image_url: Optional[str] = None
+    coordinates: Optional[Dict[str, Any]] = None
 
 
 class SectionInDB(SectionBase):
     """Schema for section as stored in the database"""
     id: str
+    color: Optional[str] = None
+    view_image_url: Optional[str] = None
+    coordinates: Optional[Dict[str, Any]] = None
+    available: int = Field(..., description="Available seats")
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="ignore"
+    )
+
+
+class SectionSearchParams(BaseModel):
+    """Schema for section search parameters"""
+    page: Optional[int] = 1
+    limit: Optional[int] = 10
+    search: Optional[str] = None
+    stadium_id: Optional[str] = None
+    sort: Optional[str] = "name"
+    order: Optional[str] = "asc"
+
+
+class AvailabilityParams(BaseModel):
+    """Schema for section availability search parameters"""
+    event_id: Optional[str] = None
+    stadium_id: Optional[str] = None
+    section_id: Optional[str] = None
 
 
 class StadiumBase(BaseModel):
@@ -79,8 +106,11 @@ class StadiumInDB(StadiumBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="ignore"
+    )
 
 
 # Response schemas to match frontend expectations

@@ -6,7 +6,7 @@ Model for stadium data in MongoDB with mappings to frontend fields
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import Field
+from pydantic import Field, ConfigDict
 from bson import ObjectId
 
 from .base import PyObjectId, MongoBaseModel
@@ -26,10 +26,14 @@ class StadiumSectionModel(MongoBaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
+    model_config = ConfigDict(
+        validate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_encoders={ObjectId: str},
+        populate_by_name=True,
+        from_attributes=True,
+        extra="ignore"
+    )
 
 
 class StadiumModel(MongoBaseModel):
@@ -47,12 +51,15 @@ class StadiumModel(MongoBaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        collection_name = "stadiums"
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {ObjectId: str}
-        schema_extra = {
+    model_config = ConfigDict(
+        collection_name="stadiums",
+        validate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_encoders={ObjectId: str},
+        populate_by_name=True,
+        from_attributes=True,
+        extra="ignore",
+        json_schema_extra={
             "example": {
                 "name": "M. A. Chidambaram Stadium",
                 "code": "CHEPAUK",
@@ -73,6 +80,7 @@ class StadiumModel(MongoBaseModel):
                 "facilities": ["Parking", "Food Court", "Restrooms"]
             }
         }
+    )
     
     # Indexes to create for this collection
     @classmethod
@@ -83,3 +91,7 @@ class StadiumModel(MongoBaseModel):
             [("location", 1)],      # Simple index on location
             [("capacity", -1)],     # Index on capacity (descending)
         ]
+
+# Add class aliases for backward compatibility
+Stadium = StadiumModel
+Section = StadiumSectionModel

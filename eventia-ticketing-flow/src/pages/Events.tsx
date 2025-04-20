@@ -5,8 +5,8 @@ import Footer from '@/components/layout/Footer';
 import EventCard from '@/components/events/EventCard';
 import { Search, Filter, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { api } from '@/lib/api';
-import { mapApiEventToUIEvent } from '@/lib/adapters';
+import { api, fetchEvents } from '@/lib/api';
+import { EventResponse } from '@/lib/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Events = () => {
@@ -16,11 +16,44 @@ const Events = () => {
   // Fetch events from API
   const { data: apiEvents, isLoading, error } = useQuery({
     queryKey: ['events', selectedCategory],
-    queryFn: () => api.getEvents(selectedCategory)
+    queryFn: async () => {
+      const response = await fetchEvents({ category: selectedCategory || undefined });
+      return response.events || [];
+    }
   });
 
   // Map API events to UI events
-  const events = apiEvents ? apiEvents.map(mapApiEventToUIEvent) : [];
+  const events = apiEvents?.map((event: EventResponse) => ({
+    id: event.id,
+    title: event.name,
+    description: event.description || '',
+    category: event.category,
+    venue: event.venue_id || '',
+    date: event.date,
+    time: event.time,
+    duration: '2 hours', // Default duration since it's not in the API response
+    ticketTypes: [{
+      category: 'General Admission',
+      price: event.price,
+      available: event.availableTickets
+    }],
+    image: event.posterImage || '',
+    featured: event.isFeatured,
+    teams: event.teamOne && event.teamTwo ? {
+      team1: {
+        name: event.teamOne,
+        shortName: event.teamOne,
+        logo: event.teamOneLogo || '',
+        color: ''
+      },
+      team2: {
+        name: event.teamTwo,
+        shortName: event.teamTwo,
+        logo: event.teamTwoLogo || '',
+        color: ''
+      }
+    } : undefined
+  })) || [];
 
   // Get all unique categories from our events
   const categories = ['All'];

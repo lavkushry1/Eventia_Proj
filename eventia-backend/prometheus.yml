@@ -16,7 +16,7 @@ scrape_configs:
   - job_name: 'eventia-backend'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['localhost:3002']
+      - targets: ['localhost:3000']
     
   - job_name: 'eventia-frontend'
     metrics_path: '/metrics'
