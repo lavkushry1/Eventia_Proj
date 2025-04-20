@@ -11,10 +11,26 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from pydantic import ValidationError
 from typing import Any, Dict, Union
+from datetime import datetime
 
 from app.schemas.common import ErrorResponse, ValidationErrorResponse
+from app.utils.json_utils import CustomJSONEncoder
+import json
 
 logger = logging.getLogger(__name__)
+
+
+# Custom JSON response that uses our CustomJSONEncoder
+class CustomJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            cls=CustomJSONEncoder,
+        ).encode("utf-8")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -41,7 +57,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             path=request.url.path
         )
         
-        return JSONResponse(
+        return CustomJSONResponse(
             status_code=exc.status_code,
             content=error.dict(),
             headers=getattr(exc, "headers", None)
@@ -68,7 +84,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             detail=errors,
         )
         
-        return JSONResponse(
+        return CustomJSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=error.dict()
         )
@@ -92,7 +108,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             path=request.url.path
         )
         
-        return JSONResponse(
+        return CustomJSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=error.dict()
         ) 

@@ -39,14 +39,14 @@ USER appuser
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_ENV=production \
-    PORT=3003
+    PORT=3000
 
 # Create a directory for static files
 RUN mkdir -p /app/static/uploads && \
     chmod 755 /app/static/uploads
 
 # Expose port
-EXPOSE 3003
+EXPOSE 3000
 
 # Set entrypoint
 CMD ["python", "flask_server.py"] 

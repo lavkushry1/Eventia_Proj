@@ -54,7 +54,7 @@ module.exports = defineConfig({
   // Local dev server to test against
   webServer: {
     command: 'cd .. && python flask_server.py',
-    port: 300,
+    port: 3000,
     reuseExistingServer: true,
   },
 }); 

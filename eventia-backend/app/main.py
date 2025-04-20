@@ -9,6 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse as FastAPIJSONResponse
+import json
+from datetime import datetime
+from bson import ObjectId
 
 from .config.settings import settings
 from .routers import (
@@ -21,6 +25,23 @@ from .routers import (
     seats
 )
 from .utils.logger import logger
+from .middleware.security import SecurityHeadersMiddleware
+from .middleware.error_handlers import register_exception_handlers
+from .middleware.rate_limiter import RateLimiter
+from .utils.json_utils import CustomJSONEncoder
+
+
+# Custom JSON encoder for the FastAPI app
+class JSONResponse(FastAPIJSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            cls=CustomJSONEncoder,
+        ).encode("utf-8")
 
 
 # Create FastAPI app
@@ -28,15 +49,16 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description=settings.PROJECT_DESCRIPTION,
     version=settings.PROJECT_VERSION,
-    docs_url="/api/docs",  # Enable docs at /api/docs
-    redoc_url="/api/redoc",  # Enable redoc at /api/redoc
+    docs_url=None,  # Custom docs URL below
+    redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/api/openapi.json",  # Set OpenAPI schema URL
+    default_response_class=JSONResponse,  # Use custom JSONResponse
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["http://localhost:8080", "http://localhost:3000"],  # Add your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -99,7 +121,7 @@ async def startup_event():
     logger.info("Starting up Eventia API...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    logger.info(f"API URL: {settings.API_BASE_URL}")
+    logger.info(f"API URL: http://localhost:3000")
     logger.info(f"Frontend URL: {settings.FRONTEND_BASE_URL}")
 
 # Shutdown event
@@ -115,3 +137,18 @@ async def root():
         "version": settings.PROJECT_VERSION,
         "docs_url": "/docs",
     }
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add rate limiter middleware
+app.add_middleware(
+    RateLimiter,
+    rate_limit=100,
+    time_window=60,
+    exempted_routes=[f"{settings.API_V1_STR}/health"],
+    exempted_ips=["127.0.0.1"]
+)
+
+# Register error handlers
+register_exception_handlers(app)

@@ -1,7 +1,7 @@
 """
 Event controller
 ---------------
-Controller for event-related operations
+Handles business logic for event operations
 """
 
 from typing import Dict, List, Optional, Union, Any
@@ -11,97 +11,75 @@ from pymongo import ASCENDING, DESCENDING
 from fastapi import HTTPException, status
 import os
 from pathlib import Path
+from motor.motor_asyncio import AsyncIOMotorCollection
 
 from ..db.mongodb import get_collection
 from ..models.event import EventModel
-from ..schemas.event import EventCreate, EventUpdate, EventInDB, EventSearchParams
+from ..schemas.event import EventCreate, EventUpdate, EventInDB, EventSearchParams, EventResponse, EventListResponse
 from ..config import settings
 from ..utils.logger import logger
 from ..utils.file import verify_image_exists
+from ..utils.json_utils import serialize_dict
 
 
 class EventController:
     """Controller for event operations"""
     
     @staticmethod
-    async def get_events(params: EventSearchParams) -> Dict[str, Any]:
-        """
-        Get events with filtering, sorting and pagination
-        
-        Args:
-            params: Search parameters
-            
-        Returns:
-            Dict with items, total count, and pagination info
-        """
+    async def get_events(params: Dict) -> EventListResponse:
+        """Get events with optional filtering"""
         try:
-            # Get events collection
             collection = await get_collection(EventModel.get_collection_name())
             
             # Build query
             query = {}
-            
-            # Apply filters
-            if params.category:
-                query["category"] = params.category
-            
-            if params.featured is not None:
-                query["featured"] = params.featured
-            
-            if params.status:
-                query["status"] = params.status
-            
-            if params.search:
-                # Text search on name and description
+            if params.get("category"):
+                query["category"] = params["category"]
+            if params.get("featured") is not None:
+                query["featured"] = params["featured"]
+            if params.get("search"):
                 query["$or"] = [
-                    {"name": {"$regex": params.search, "$options": "i"}},
-                    {"description": {"$regex": params.search, "$options": "i"}}
+                    {"name": {"$regex": params["search"], "$options": "i"}},
+                    {"description": {"$regex": params["search"], "$options": "i"}}
                 ]
-            
-            # Set up pagination
-            skip = (params.page - 1) * params.limit
-            
-            # Set up sorting
-            sort_field = params.sort or "start_date"
-            sort_direction = ASCENDING if params.order == "asc" else DESCENDING
             
             # Get total count
             total = await collection.count_documents(query)
             
-            # Fetch events
-            cursor = collection.find(query)
-            cursor = cursor.sort(sort_field, sort_direction)
-            cursor = cursor.skip(skip).limit(params.limit)
+            # Get events with pagination
+            skip = (params.get("page", 1) - 1) * params.get("limit", 10)
+            cursor = collection.find(query).skip(skip).limit(params.get("limit", 10))
             
-            # Convert to list of dicts
-            events = await cursor.to_list(length=params.limit)
+            # Apply sorting if specified
+            if params.get("sort"):
+                sort_order = 1 if params.get("order", "asc") == "asc" else -1
+                cursor = cursor.sort(params["sort"], sort_order)
             
-            # Process events to ensure image URLs are valid
-            for event in events:
-                if event.get("poster_url"):
-                    poster_path = Path(settings.STATIC_DIR) / event["poster_url"].lstrip("/static/")
-                    if not poster_path.exists():
-                        # Use placeholder if image doesn't exist
-                        event["poster_url"] = f"{settings.STATIC_URL}/placeholders/event-placeholder.jpg"
-                        logger.warning(f"Event poster not found, using placeholder: {event['_id']}")
+            # Convert to list of events and serialize datetime objects
+            events = []
+            async for doc in cursor:
+                # Convert ObjectId to string and serialize datetime objects
+                serialized_doc = serialize_dict(doc)
+                # Now we can use the serialized document
+                event_model = EventModel.from_mongo(serialized_doc)
+                events.append(event_model)
             
             # Calculate total pages
-            total_pages = (total + params.limit - 1) // params.limit
+            limit = params.get("limit", 10)
+            total_pages = (total + limit - 1) // limit if limit > 0 else 0
             
-            # Create response
-            return {
-                "items": [EventModel.from_mongo(event).dict() for event in events],
-                "total": total,
-                "page": params.page,
-                "limit": params.limit,
-                "total_pages": total_pages
-            }
+            return EventListResponse(
+                items=events,
+                total=total,
+                page=params.get("page", 1),
+                limit=params.get("limit", 10),
+                total_pages=total_pages
+            )
             
         except Exception as e:
-            logger.error(f"Error getting events: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve events: {str(e)}"
+                detail=f"Error getting events: {str(e)}"
             )
     
     @staticmethod
@@ -146,8 +124,15 @@ class EventController:
                     event["poster_url"] = f"{settings.STATIC_URL}/placeholders/event-placeholder.jpg"
                     logger.warning(f"Event poster not found, using placeholder: {event_id}")
             
+            # Serialize the event to handle datetime and ObjectId
+            serialized_event = serialize_dict(event)
+            
             # Convert to Pydantic model and return
-            return EventModel.from_mongo(event).dict()
+            model = EventModel.from_mongo(serialized_event)
+            try:
+                return model.model_dump()
+            except AttributeError:
+                return model.dict()
             
         except HTTPException:
             raise
@@ -190,7 +175,11 @@ class EventController:
                     logger.warning(f"Event poster not found, using placeholder: {event_data.poster_url}")
             
             # Create event
-            event_dict = event_data.dict()
+            try:
+                event_dict = event_data.model_dump()
+            except AttributeError:
+                event_dict = event_data.dict()
+                
             event_dict["created_at"] = datetime.utcnow()
             event_dict["updated_at"] = datetime.utcnow()
             
@@ -205,8 +194,15 @@ class EventController:
             # Get created event
             created_event = await collection.find_one({"_id": result.inserted_id})
             
+            # Serialize the created event to handle datetime and ObjectId
+            serialized_event = serialize_dict(created_event)
+            
             # Return created event
-            return EventModel.from_mongo(created_event).dict()
+            model = EventModel.from_mongo(serialized_event)
+            try:
+                return model.model_dump()
+            except AttributeError:
+                return model.dict()
             
         except HTTPException:
             raise
@@ -253,7 +249,10 @@ class EventController:
                 )
             
             # Prepare update data
-            update_data = {k: v for k, v in event_data.dict().items() if v is not None}
+            try:
+                update_data = {k: v for k, v in event_data.model_dump().items() if v is not None}
+            except AttributeError:
+                update_data = {k: v for k, v in event_data.dict().items() if v is not None}
             
             # Convert venue_id and team_ids to ObjectId if provided
             if "venue_id" in update_data and ObjectId.is_valid(update_data["venue_id"]):
@@ -290,8 +289,15 @@ class EventController:
             # Get updated event
             updated_event = await collection.find_one({"_id": ObjectId(event_id)})
             
+            # Serialize the updated event to handle datetime and ObjectId
+            serialized_event = serialize_dict(updated_event)
+            
             # Return updated event
-            return EventModel.from_mongo(updated_event).dict()
+            model = EventModel.from_mongo(serialized_event)
+            try:
+                return model.model_dump()
+            except AttributeError:
+                return model.dict()
             
         except HTTPException:
             raise

@@ -15,7 +15,7 @@ from passlib.context import CryptContext
 from pydantic import EmailStr
 
 from app.core.config import settings
-from app.db.mongodb import get_database
+from app.db.mongodb import get_collection
 from app.schemas.users import UserCreate, UserInDB, UserResponse, UserUpdate, TokenData
 
 # Password hashing
@@ -28,8 +28,8 @@ ALGORITHM = "HS256"
 
 async def get_user_collection():
     """Get the users collection from MongoDB"""
-    db = await get_database()
-    return db.users
+    db = await get_collection("users")
+    return db
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -23,7 +23,7 @@ from app.utils.logger import logger
 from app.middleware.security import SecurityHeadersMiddleware, RateLimiter
 from app.middleware.error_handlers import register_exception_handlers
 from app.utils.initialization import initialize_app
-from app.db.mongodb import database
+from app.db.mongodb import get_collection
 from app.routers import auth
 
 # Create FastAPI application
@@ -98,7 +98,7 @@ async def startup_db_client():
     initialize_app()
     
     # Connect to database
-    await database.connect()
+    await get_collection.connect()
     
     # Log startup complete
     logger.info(f"{settings.project_name} started successfully")
@@ -110,7 +110,7 @@ async def shutdown_db_client():
     logger.info(f"Shutting down {settings.project_name}...")
     
     # Close database connection
-    await database.close()
+    await get_collection.close()
     
     # Log shutdown complete
     logger.info(f"{settings.project_name} shut down successfully")
@@ -142,7 +142,7 @@ async def health_check():
     """Health check endpoint to verify API and database status"""
     try:
         # Check database connection
-        db_connected = await database.is_connected()
+        db_connected = await get_collection.is_connected()
         
         return {
             "status": "ok",

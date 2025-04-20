@@ -75,6 +75,9 @@ class SeatInDB(SeatBase):
 
     class Config:
         orm_mode = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 class SeatViewImageBase(BaseModel):

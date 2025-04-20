@@ -74,6 +74,9 @@ class UserResponse(UserBase):
                 "created_at": "2023-01-01T00:00:00",
                 "updated_at": "2023-01-01T00:00:00"
             }
+        },
+        "json_encoders": {
+            datetime: lambda v: v.isoformat()
         }
     }
 
@@ -117,7 +120,8 @@ class UserInDB(UserBase):
         "validate_by_name": True,
         "arbitrary_types_allowed": True,
         "json_encoders": {
-            ObjectId: str
+            ObjectId: str,
+            datetime: lambda v: v.isoformat()
         }
     }
 

@@ -7,7 +7,7 @@ services:
       context: ./eventia-ticketing-flow
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "8080:8080"
     volumes:
       - ./eventia-ticketing-flow:/app
       - /app/node_modules

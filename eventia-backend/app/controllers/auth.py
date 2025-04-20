@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.config import settings
-from app.db.mongodb import database, get_collection
+from app.db.mongodb import get_collection
 from app.schemas.users import UserCreate, UserInDB, UserResponse, TokenData
 from app.utils.security import generate_random_token
 

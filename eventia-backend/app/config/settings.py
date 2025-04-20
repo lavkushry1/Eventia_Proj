@@ -26,14 +26,14 @@ class Settings(BaseSettings):
     API_DOMAIN: str = "localhost"
 
     # CORS configuration
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     # Logging configuration
     LOG_LEVEL: str = "DEBUG"
     ROOT_PATH: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     # MongoDB configuration
-    MONGODB_URL: Optional[str] = "mongodb://localhost:27017"
+    MONGODB_URL: Optional[str] = "mongodb://frdweb12:G5QMAprruao49p2u@mongodb-shard-00-00.s8fgq.mongodb.net:27017,mongodb-shard-00-01.s8fgq.mongodb.net:27017,mongodb-shard-00-02.s8fgq.mongodb.net:27017/?replicaSet=atlas-11uw3h-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority&appName=MongoDB"
     MONGODB_DB: str = "eventia"
 
     # For backward compatibility

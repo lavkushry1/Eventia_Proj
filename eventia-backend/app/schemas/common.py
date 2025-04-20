@@ -18,6 +18,11 @@ class BaseAPIResponse(BaseModel):
     """
     success: bool = True
     message: Optional[str] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 class PaginatedResponse(BaseModel):
@@ -45,11 +50,13 @@ class ErrorResponse(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "detail": "Not found",
                 "status_code": 404,
                 "path": "/api/v1/resource/123",
                 "timestamp": "2023-04-18T12:34:56.789Z"
             }
+        }
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
         }
 
 
@@ -74,4 +81,7 @@ class ValidationErrorResponse(BaseModel):
                 "status_code": 422,
                 "timestamp": "2023-04-18T12:34:56.789Z"
             }
+        }
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
         } 

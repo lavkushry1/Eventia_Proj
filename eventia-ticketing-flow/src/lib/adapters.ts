@@ -1,5 +1,27 @@
 import { ApiEvent, ApiBookingResponse } from '@/lib/api';
 import { CustomerInfo, EventResponse, BookingResponse, SelectedTicket } from './types';
+import configManager from './config';
+
+// Helper function to extract time from ISO datetime
+function extractTimeFromDateTime(dateTimeStr?: string): string {
+  if (!dateTimeStr) return '';
+  try {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    console.error('Error parsing datetime:', e);
+    return '';
+  }
+}
+
+// Helper function to format image URLs
+function formatImageUrl(imageUrl?: string, type: string = 'events'): string {
+  if (!imageUrl) return '/placeholder.svg';
+  if (imageUrl.startsWith('http') || imageUrl.startsWith('/assets')) {
+    return imageUrl;
+  }
+  return `${configManager.getStaticUrl(type, imageUrl)}`;
+}
 
 // Frontend event model (UI-specific)
 export interface UIEvent {
@@ -77,70 +99,107 @@ const getTeamShortName = (fullName: string): string => {
   return teamShortCodes[fullName] || fullName.substring(0, 3).toUpperCase();
 };
 
+/**
+ * Consistent adapter function to map any backend event data format to 
+ * the frontend EventResponse type
+ */
+export function mapApiResponseToFrontendModel(apiEvent: any): EventResponse {
+  console.debug('Mapping API event:', apiEvent);
+  
+  return {
+    id: apiEvent.id || apiEvent._id || '',
+    name: apiEvent.name || '',
+    description: apiEvent.description || '',
+    date: apiEvent.date || (apiEvent.start_date ? new Date(apiEvent.start_date).toISOString().split('T')[0] : ''),
+    time: apiEvent.time || (apiEvent.start_date ? extractTimeFromDateTime(apiEvent.start_date) : ''),
+    venue: apiEvent.venue || 'TBD',
+    venue_id: apiEvent.venue_id || '',
+    stadium_id: apiEvent.stadium_id || '',
+    category: apiEvent.category || 'Event',
+    price: apiEvent.price || 0,
+    currency: apiEvent.currency || 'INR',
+    totalTickets: apiEvent.totalTickets || 0,
+    availableTickets: apiEvent.availableTickets || 0,
+    soldOut: apiEvent.soldOut || false,
+    isFeatured: apiEvent.featured || apiEvent.isFeatured || false,
+    status: apiEvent.status || 'upcoming',
+    posterImage: formatImageUrl(apiEvent.poster_url || apiEvent.posterImage, 'events'),
+    teamOne: apiEvent.teamOne || (apiEvent.team_home ? apiEvent.team_home.name : ''),
+    teamTwo: apiEvent.teamTwo || (apiEvent.team_away ? apiEvent.team_away.name : ''),
+    teamOneLogo: formatImageUrl(apiEvent.teamOneLogo || (apiEvent.team_home ? apiEvent.team_home.logo : ''), 'teams'),
+    teamTwoLogo: formatImageUrl(apiEvent.teamTwoLogo || (apiEvent.team_away ? apiEvent.team_away.logo : ''), 'teams'),
+    createdAt: apiEvent.createdAt || apiEvent.created_at || '',
+    updatedAt: apiEvent.updatedAt || apiEvent.updated_at || ''
+  };
+}
+
 // Convert backend event model to frontend event model
-export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent): UIEvent => {
-  console.log('Mapping API event to UI event:', JSON.stringify(apiEvent, null, 2));
+export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent | EventResponse): UIEvent => {
+  console.debug('Mapping to UI event model:', apiEvent);
+  
+  // Standardize the event object first if it's not already in the expected format
+  const standardEvent = 'id' in apiEvent && 'name' in apiEvent ? 
+    apiEvent as EventResponse : 
+    mapApiResponseToFrontendModel(apiEvent);
   
   // Check for ticket types from API or create default
   let ticketTypes = [];
   
   // If the API provides ticket_types array, use that
-  if (apiEvent.ticket_types && Array.isArray(apiEvent.ticket_types)) {
-    console.log('Using ticket_types from API:', apiEvent.ticket_types);
+  if ('ticket_types' in apiEvent && Array.isArray(apiEvent.ticket_types)) {
+    console.debug('Using ticket_types from API:', apiEvent.ticket_types);
     ticketTypes = apiEvent.ticket_types.map(tt => ({
       category: tt.name || "Standard",
       price: tt.price,
       available: tt.available
     }));
   } else {
-    // Otherwise create standard ticket type from ticket_price/tickets_available
-    console.log('Creating default ticket types from price/availability');
-    const defaultTicketType = {
-      category: "Standard",
-      price: apiEvent.ticket_price || 0,
-      available: apiEvent.tickets_available || 0
-    };
+    // Otherwise create standard ticket type from available properties
+    const price = standardEvent.price || 0;
+    const available = standardEvent.availableTickets || 0;
     
-    ticketTypes = [defaultTicketType];
+    ticketTypes = [{
+      category: "Standard",
+      price,
+      available
+    }];
     
     // Add premium ticket option if regular price exists
-    if (apiEvent.ticket_price) {
+    if (price > 0) {
       ticketTypes.push({
         category: "Premium",
-        price: Math.round(apiEvent.ticket_price * 1.5), // 50% more expensive
-        available: Math.round(apiEvent.tickets_available * 0.5) // Half the availability
+        price: Math.round(price * 1.5), // 50% more expensive
+        available: Math.round(available * 0.5) // Half the availability
       });
     }
   }
 
   // Determine if this is an IPL match by checking if category is "IPL"
-  const isIplMatch = apiEvent.category === "IPL";
+  const isIplMatch = standardEvent.category === "IPL";
   
   // Initialize teams object
   let teams = undefined;
   
-  // If API provides team_home and team_away, use those
-  if (apiEvent.team_home && apiEvent.team_away) {
-    console.log('Using team data from API');
+  // If we have team information (either from standardEvent or original apiEvent)
+  if (standardEvent.teamOne && standardEvent.teamTwo) {
     teams = {
       team1: {
-        name: apiEvent.team_home.name,
-        shortName: getTeamShortName(apiEvent.team_home.name),
-        logo: apiEvent.team_home.code ? `/assets/teams/${apiEvent.team_home.code.toLowerCase()}.png` : undefined,
-        color: apiEvent.team_home.primary_color || apiEvent.team_home.color
+        name: standardEvent.teamOne,
+        shortName: getTeamShortName(standardEvent.teamOne),
+        logo: standardEvent.teamOneLogo || '',
+        color: "#004BA0" // Default blue
       },
       team2: {
-        name: apiEvent.team_away.name,
-        shortName: getTeamShortName(apiEvent.team_away.name),
-        logo: apiEvent.team_away.code ? `/assets/teams/${apiEvent.team_away.code.toLowerCase()}.png` : undefined,
-        color: apiEvent.team_away.primary_color || apiEvent.team_away.color
+        name: standardEvent.teamTwo,
+        shortName: getTeamShortName(standardEvent.teamTwo),
+        logo: standardEvent.teamTwoLogo || '',
+        color: "#FFFF00" // Default yellow
       }
     };
-  } 
+  }
   // Otherwise, try to parse team information from title if this is an IPL match
-  else if (isIplMatch && apiEvent.title && apiEvent.title.includes("vs")) {
-    console.log('Parsing team info from title:', apiEvent.title);
-    const teamNames = apiEvent.title.split("vs").map((t: string) => t.trim());
+  else if (isIplMatch && standardEvent.name && standardEvent.name.includes("vs")) {
+    const teamNames = standardEvent.name.split("vs").map((t: string) => t.trim());
     
     if (teamNames.length === 2) {
       const team1Code = getTeamShortName(teamNames[0]).toLowerCase();
@@ -164,21 +223,21 @@ export const mapApiEventToUIEvent = (apiEvent: LegacyApiEvent): UIEvent => {
   }
 
   const uiEvent = {
-    id: apiEvent.id || `event-${Math.random().toString(36).substring(2, 9)}`,
-    title: apiEvent.title || "",
-    description: apiEvent.description || "",
-    category: apiEvent.category || "Event",
-    venue: apiEvent.venue || "TBD",
-    date: apiEvent.date || "",
-    time: apiEvent.time || "",
-    duration: "2-3 hours", // Estimated duration (not provided in backend model)
+    id: standardEvent.id,
+    title: standardEvent.name,
+    description: standardEvent.description || '',
+    category: standardEvent.category,
+    venue: standardEvent.venue || '',
+    date: standardEvent.date,
+    time: standardEvent.time,
+    duration: "2-3 hours", // Default duration
     ticketTypes: ticketTypes,
-    image: apiEvent.image_url || "/placeholder.svg",
-    featured: apiEvent.is_featured || false,
+    image: standardEvent.posterImage || "/placeholder.svg",
+    featured: standardEvent.isFeatured,
     teams: teams
   };
   
-  console.log('Mapped to UI event:', JSON.stringify(uiEvent, null, 2));
+  console.debug('Mapped to UI event:', uiEvent);
   return uiEvent;
 };
 

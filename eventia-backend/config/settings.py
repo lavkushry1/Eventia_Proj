@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     """Application settings"""
     # API Configuration
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
-    API_PORT: int = int(os.getenv("API_PORT", "3003"))
+    API_PORT: int = int(os.getenv("API_PORT", "3000"))
     API_V1_STR: str = os.getenv("API_PREFIX", "/api")
-    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:3003")
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:3000")
     SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", secrets.token_urlsafe(32))
     ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours

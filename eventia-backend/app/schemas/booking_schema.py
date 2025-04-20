@@ -48,6 +48,11 @@ class BookingSchema(BaseModel):
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="The creation timestamp of the booking.")
     payment_verified_at: Optional[datetime] = Field(None, description="The timestamp when the payment was verified.")
     updated_at: Optional[datetime] = Field(default_factory=datetime.now, description="The last update timestamp of the booking.")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 class BookingCreateSchema(BookingBase):
     """Schema for creating a new booking."""
@@ -114,3 +119,8 @@ class TicketSchema(BaseModel):
     event: dict = Field(..., description="Event information")
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="The creation timestamp of the ticket")
     verified_at: Optional[datetime] = Field(None, description="The timestamp when the ticket was verified", alias="payment_verified_at")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }

@@ -31,10 +31,10 @@ services:
       dockerfile: Dockerfile.prod
     restart: unless-stopped
     ports:
-      - "3003:3003"
+      - "3000:3000"
     environment:
       - FLASK_ENV=production
-      - PORT=3003
+      - PORT=3000
       - MONGO_URI=mongodb://mongodb:27017/eventia
       - ADMIN_TOKEN=${ADMIN_TOKEN:-supersecuretoken123}
     depends_on:
@@ -42,7 +42,7 @@ services:
     networks:
       - eventia-network
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -29,6 +29,11 @@ class TokenData(BaseModel):
     username: Optional[str] = None
     role: Optional[str] = None
     exp: Optional[datetime] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import configManager from './config';
 import type {
   EventList, 
@@ -16,6 +16,39 @@ import type {
   AdminLoginResponse,
   DashboardStats
 } from './types';
+import { mapApiResponseToFrontendModel } from './adapters';
+
+// Define types for API responses
+export interface ApiEvent {
+  id: string;
+  name: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  venue_id?: string;
+  poster_url?: string;
+  category?: string;
+  featured?: boolean;
+  status?: string;
+  team_ids?: string[];
+  ticket_types?: Array<{
+    name: string;
+    price: number;
+    available: number;
+  }>;
+}
+
+export interface ApiBookingResponse {
+  booking_id: string;
+  event_id: string;
+  customer_info: any;
+  selected_tickets: any[];
+  total_amount: number;
+  status: string;
+  payment_info?: any;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface EventQueryParams {
   category?: string;
@@ -39,121 +72,151 @@ interface TeamQueryParams {
   order?: 'asc' | 'desc';
 }
 
+// Helper function to get image URL
+export const getImageUrl = (imagePath: string): string => {
+  const baseUrl = configManager.config().staticUrl || '';
+  
+  if (!imagePath) return '/placeholder.svg';
+  if (imagePath.startsWith('http') || imagePath.startsWith('/assets')) {
+    return imagePath;
+  }
+  
+  return `${baseUrl}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
+};
+
 // Create axios instance with default configuration
 export const api = axios.create({
-  baseURL: configManager.getApiUrl(''),
+  baseURL: 'http://localhost:3000/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add request interceptor for authentication
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-// Add response interceptor for error handling
+// Add response interceptor for logging and debugging
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Handle session expiry
-    if (error.response && error.response.status === 401) {
-      // Check if the error is on an admin route
-      if (error.config.url.includes('/admin')) {
-        localStorage.removeItem('admin_token');
-        window.location.href = '/admin/login';
-      }
-    }
+  (response) => {
+    console.debug(`API Response [${response.config.method?.toUpperCase()}] ${response.config.url}:`, response.data);
+    return response;
+  },
+  (error: AxiosError) => {
+    console.error(`API Error [${error.config?.method?.toUpperCase()}] ${error.config?.url}:`, {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
     return Promise.reject(error);
   }
 );
 
-// Handle image URLs to ensure they have proper base URL
-export const getImageUrl = (path: string | undefined | null): string => {
-  if (!path) return '';
-
-  // Return as is if it's already an absolute URL
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
+// Add request interceptor for logging
+api.interceptors.request.use(
+  (config) => {
+    console.debug(`API Request [${config.method?.toUpperCase()}] ${config.url}:`, {
+      params: config.params,
+      data: config.data
+    });
+    return config;
+  },
+  (error) => {
+    console.error('API Request Error:', error);
+    return Promise.reject(error);
   }
-
-  // Add API_BASE_URL if it's a relative path
-  if (path.startsWith('/')) {
-    return configManager.getApiUrl(path);
-  }
-
-  // Add static path for other cases
-  return `${configManager.getConfig().STATIC_URL}/${path}`;
-};
+);
 
 // Event API calls
 export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventList> => {
-  const { data } = await api.get('/api/events', { params });
+  try {
+    const { data } = await api.get('/events', { params });
 
-  // Process image URLs in the response
-  data.events = data.events.map((event: EventResponse) => ({
-    ...event,
-    posterImage: event.posterImage ? getImageUrl(event.posterImage) : '',
-    teamOneLogo: event.teamOneLogo ? getImageUrl(event.teamOneLogo) : '',
-    teamTwoLogo: event.teamTwoLogo ? getImageUrl(event.teamTwoLogo) : '',
-  }));
-
-  return data;
+    // Handle different response formats
+    // If backend returns items property (paginated response)
+    const events = data.items || data.events || [];
+    
+    // Map each event to the standard format
+    const standardizedEvents = events.map((event: any) => mapApiResponseToFrontendModel(event));
+    
+    return {
+      events: standardizedEvents,
+      total: data.total || events.length,
+      skip: data.skip || 0,
+      limit: data.limit || events.length
+    };
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    // Return empty result on error
+    return {
+      events: [],
+      total: 0,
+      skip: 0,
+      limit: 10
+    };
+  }
 };
 
 export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
-  const { data } = await api.get(`/api/events/${eventId}`);
-
-  // Process image URLs
-  return {
-    ...data,
-    posterImage: data.posterImage ? getImageUrl(data.posterImage) : '',
-    teamOneLogo: data.teamOneLogo ? getImageUrl(data.teamOneLogo) : '',
-    teamTwoLogo: data.teamTwoLogo ? getImageUrl(data.teamTwoLogo) : '',
-  };
+  try {
+    const { data } = await api.get(`/events/${eventId}`);
+    
+    // Handle different response formats
+    // If data is nested under 'data' property (common pattern)
+    const eventData = data.data || data;
+    
+    // Return standardized event
+    return mapApiResponseToFrontendModel(eventData);
+  } catch (error) {
+    console.error(`Error fetching event ${eventId}:`, error);
+    throw error;
+  }
 };
 
 // Stadium API calls
-export const fetchStadiums = async (params: StadiumQueryParams = {}): Promise<StadiumList> => {
-  const { data } = await api.get('/api/stadiums', { params });
-
-  // Process image URLs
-  data.stadiums = data.stadiums.map((stadium: Stadium) => ({
-    ...stadium,
-    image_url: stadium.image_url ? getImageUrl(stadium.image_url) : '',
-    sections: stadium.sections?.map(section => ({
-      ...section,
-      image_url: section.image_url ? getImageUrl(section.image_url) : '',
-      views: section.views?.map(view => ({
-        ...view,
-        image_url: getImageUrl(view.image_url),
-      })),
-    })),
-  }));
-
-  return data;
+export const fetchStadiums = async (): Promise<StadiumList> => {
+  try {
+    const { data } = await api.get('/stadiums');
+    
+    // Process image URLs
+    const stadiums = (data.items || data.stadiums || []).map((stadium: Stadium) => ({
+      ...stadium,
+      image_url: stadium.image_url ? getImageUrl(stadium.image_url) : undefined,
+    }));
+    
+    return {
+      stadiums,
+      total: data.total || stadiums.length,
+      skip: data.skip || 0,
+      limit: data.limit || stadiums.length
+    };
+  } catch (error) {
+    console.error('Error fetching stadiums:', error);
+    return {
+      stadiums: [],
+      total: 0,
+      skip: 0,
+      limit: 10
+    };
+  }
 };
 
 export const fetchStadium = async (stadiumId: string): Promise<Stadium> => {
-  const { data } = await api.get(`/api/stadiums/${stadiumId}`);
-
-  // Process image URLs
-  return {
-    ...data,
-    image_url: data.image_url ? getImageUrl(data.image_url) : '',
-    sections: data.sections?.map(section => ({
-      ...section,
-      image_url: section.image_url ? getImageUrl(section.image_url) : '',
-      views: section.views?.map(view => ({
-        ...view,
-        image_url: getImageUrl(view.image_url),
+  try {
+    const { data } = await api.get(`/stadiums/${stadiumId}`);
+    
+    // Handle nested data
+    const stadium = data.data || data;
+    
+    // Process image URLs
+    return {
+      ...stadium,
+      image_url: stadium.image_url ? getImageUrl(stadium.image_url) : undefined,
+      sections: (stadium.sections || []).map((section: any) => ({
+        ...section,
+        image_url: section.image_url ? getImageUrl(section.image_url) : undefined,
       })),
-    })),
-  };
+    };
+  } catch (error) {
+    console.error(`Error fetching stadium ${stadiumId}:`, error);
+    throw error;
+  }
 };
 
 export const fetchSeatViewImages = async (stadiumId: string, sectionId: string): Promise<SeatViewImageList> => {

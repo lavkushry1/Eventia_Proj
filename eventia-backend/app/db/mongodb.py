@@ -1,140 +1,78 @@
 """
-MongoDB connection
------------------
-Database connection and initialization
+MongoDB connection and utilities
 """
 
-import asyncio
-import motor.motor_asyncio
-from loguru import logger
-from pymongo import IndexModel
-from typing import Dict, List, Any
+import os
+from typing import Optional
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 
-from ..config import settings
-from ..utils.logger import logger
-
-
-# MongoDB client
-client = None
+# Global MongoDB client and database instances
+client: Optional[AsyncIOMotorClient] = None
 db = None
-database = None  # Alias for db for backward compatibility
-
+database = None  # Alias for db to maintain compatibility
 
 async def connect_to_mongo():
-    """Connect to MongoDB and initialize the client"""
+    """Connect to MongoDB"""
     global client, db, database
     
     try:
-        logger.info(f"Connecting to MongoDB: {settings.MONGODB_URL}")
+        # Get MongoDB connection string from environment
+        mongo_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
         
-        # Create Motor client
-        client = motor.motor_asyncio.AsyncIOMotorClient(
-            settings.MONGODB_URL,
-            serverSelectionTimeoutMS=5000
-        )
+        # Create async client
+        client = AsyncIOMotorClient(mongo_url)
         
-        # Get database
-        db = client[settings.MONGODB_DB]
+        # Test the connection
+        await client.admin.command('ping')
+        
+        # Get the database
+        db = client.eventia
         database = db  # Set the alias
         
-        # Validate connection
-        await client.admin.command('ping')
-        logger.info(f"Connected to MongoDB: {settings.MONGODB_DB}")
+        print("Connected to MongoDB successfully")
         
-        # Initialize indexes
-        await initialize_indexes()
-        
-        return client, db
-    
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {str(e)}")
+    except ConnectionFailure as e:
+        print(f"Failed to connect to MongoDB: {str(e)}")
         raise
-
 
 async def close_mongo_connection():
     """Close MongoDB connection"""
-    global client
-    
+    global client, db, database
     if client:
-        logger.info("Closing MongoDB connection")
         client.close()
-
-
-async def get_database():
-    """Get the database instance"""
-    global db
-    
-    if not db:
-        await connect_to_mongo()
-    
-    return db
-
-
-async def initialize_indexes():
-    """Initialize indexes for collections"""
-    from ..models.event import EventModel
-    from ..models.team import TeamModel
-    from ..models.stadium import StadiumModel
-    from ..models.booking import BookingModel
-    from ..models.payment import PaymentModel
-    
-    # Models with their indexes
-    models = [
-        EventModel,
-        TeamModel,
-        StadiumModel,
-        BookingModel,
-        PaymentModel
-    ]
-    
-    for model in models:
-        collection_name = model.get_collection_name()
-        logger.info(f"Creating indexes for collection: {collection_name}")
-        
-        indexes = model.get_indexes()
-        if indexes:
-            collection = db[collection_name]
-            
-            for index_spec in indexes:
-                try:
-                    # Check if index_spec is a list (for simple indexes) or tuple (for compound)
-                    if isinstance(index_spec, list):
-                        if len(index_spec) == 1:
-                            # Simple index
-                            field, direction = index_spec[0]
-                            await collection.create_index(field, background=True)
-                        else:
-                            # Compound index
-                            await collection.create_index(index_spec, background=True)
-                    else:
-                        # This is a complete index specification
-                        await collection.create_index(**index_spec)
-                    
-                except Exception as e:
-                    logger.error(f"Failed to create index for {collection_name}: {str(e)}")
-
+        db = None
+        database = None
+        print("MongoDB connection closed")
 
 async def get_collection(collection_name: str):
     """Get a MongoDB collection"""
     global db
     
-    if not db:
+    if db is None:
         await connect_to_mongo()
     
     return db[collection_name]
 
-
-async def check_db_connection() -> bool:
-    """Check if the database connection is healthy"""
-    global client
+async def initialize_indexes():
+    """Initialize indexes for all collections"""
+    from app.models.event import EventModel
+    from app.models.team import TeamModel
+    from app.models.stadium import StadiumModel
+    from app.models.booking import BookingModel
     
-    try:
-        if not client:
-            await connect_to_mongo()
-        
-        await client.admin.command('ping')
-        return True
+    models = [EventModel, TeamModel, StadiumModel, BookingModel]
     
-    except Exception as e:
-        logger.error(f"Database connection check failed: {str(e)}")
-        return False
+    for model in models:
+        try:
+            collection = await get_collection(model.get_collection_name())
+            indexes = model.get_indexes()
+            
+            for index in indexes:
+                await collection.create_index(index)
+            
+            print(f"Created indexes for collection: {model.get_collection_name()}")
+        except Exception as e:
+            print(f"Failed to create index for {model.get_collection_name()}: {str(e)}")
+            raise

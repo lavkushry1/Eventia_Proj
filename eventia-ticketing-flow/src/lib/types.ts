@@ -215,3 +215,194 @@ export interface ErrorResponse {
   code?: string;
   path?: string;
 }
+
+/**
+ * Event and API response types
+ */
+
+// Core API response types
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
+// Backend API event types
+export interface ApiEvent {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  venue_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  ticket_types: ApiTicketType[];
+  image?: string;
+  team_ids?: string[];
+  status: string;
+  totalTickets: number;
+  availableTickets: number;
+  soldOut: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiTicketType {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  remaining?: number;
+}
+
+export interface ApiTeam {
+  id: string;
+  name: string;
+  logo?: string;
+  description?: string;
+}
+
+export interface ApiVenue {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode: string;
+  capacity: number;
+  image?: string;
+}
+
+// Frontend UI Models
+export interface UIEvent {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  venue: string;
+  venueId: string;
+  date: string;
+  time: string;
+  duration: string;
+  ticketTypes: UITicketType[];
+  image: string;
+  featured: boolean;
+  teams?: string[];
+  status?: string;
+  isSoldOut?: boolean;
+}
+
+export interface UITicketType {
+  id: string;
+  name: string;
+  price: number;
+  available: number;
+}
+
+// Booking related types
+export interface ApiBookingResponse {
+  id: string;
+  event_id: string;
+  user_id: string;
+  tickets: ApiBookingTicket[];
+  total_amount: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiBookingTicket {
+  ticket_type_id: string;
+  quantity: number;
+  price: number;
+}
+
+export interface BookingRequest {
+  eventId: string;
+  tickets: {
+    ticketTypeId: string;
+    quantity: number;
+  }[];
+}
+
+export interface UIBooking {
+  id: string;
+  eventId: string;
+  tickets: UIBookingTicket[];
+  totalAmount: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface UIBookingTicket {
+  ticketTypeId: string;
+  ticketTypeName?: string;
+  quantity: number;
+  price: number;
+}
+
+// Legacy interfaces for backward compatibility
+export interface LegacyApiEvent {
+  id: string;
+  title: string; 
+  description: string;
+  category: string;
+  venue: string;
+  venue_id?: string;
+  start_date: string;
+  end_date: string;
+  start_time: string;
+  end_time: string;
+  ticket_types: ApiTicketType[];
+  image: string;
+  featured: boolean;
+  teams: string[];
+}
+
+export interface LegacyApiBookingResponse {
+  booking_id: string;
+  event_id: string;
+  user_id: string;
+  tickets: {
+    type_id: string;
+    quantity: number;
+    price: number;
+  }[];
+  total_amount: number;
+  status: string;
+  created_at: string;
+}
+
+// Event response from API
+export interface EventResponse {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  venue_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  ticket_types: ApiTicketType[];
+  image?: string;
+  team_ids?: string[];
+  status: string;
+  totalTickets: number;
+  availableTickets: number;
+  soldOut: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Used for the events list
+export interface EventList {
+  events: EventResponse[];
+}

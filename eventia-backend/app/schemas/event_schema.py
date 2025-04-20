@@ -60,6 +60,11 @@ class EventSchema(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was created")
     updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
 
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
     @validator('date')
     def validate_date(cls, v):
         datetime.strptime(v, '%Y-%m-%d')
@@ -144,6 +149,11 @@ class EventUpdateSchema(BaseModel):
     teams: Optional[EventTeamsSchema] = Field(None, description="Teams playing in the event")
     ticketTypes: Optional[List[TicketTypeSchema]] = Field(None, description="List of ticket types for the event")
     updated_at: datetime = Field(default_factory=datetime.now, description="Timestamp when the event was last updated")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
     @validator('date')
     def validate_date(cls, v):

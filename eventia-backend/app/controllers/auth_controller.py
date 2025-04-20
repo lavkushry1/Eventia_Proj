@@ -11,7 +11,7 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from app.db.mongodb import get_database
+from app.db.mongodb import get_collection
 from app.schemas.users import UserCreate, UserResponse
 from app.core.config import settings
 from pymongo.collection import Collection
@@ -23,11 +23,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-def get_users_collection() -> Collection:
-    """Get users collection from database"""
-    db = get_database()
-    return db.users
-
 async def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hashed password"""
     return pwd_context.verify(plain_password, hashed_password)
@@ -38,7 +33,7 @@ async def get_password_hash(password: str) -> str:
 
 async def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     """Get user by email from database"""
-    users_collection = get_users_collection()
+    users_collection = await get_collection("users")
     user = await users_collection.find_one({"email": email})
     return user
 
@@ -85,7 +80,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
     except JWTError:
         raise credentials_exception
         
-    users_collection = get_users_collection()
+    users_collection = await get_collection("users")
     user = await users_collection.find_one({"_id": ObjectId(user_id)})
     
     if user is None:
@@ -104,7 +99,7 @@ async def get_current_active_user(current_user: Dict[str, Any] = Depends(get_cur
 
 async def register_new_user(user_data: UserCreate) -> UserResponse:
     """Register a new user"""
-    users_collection = get_users_collection()
+    users_collection = await get_collection("users")
     
     # Check if user with this email already exists
     existing_user = await get_user_by_email(user_data.email)

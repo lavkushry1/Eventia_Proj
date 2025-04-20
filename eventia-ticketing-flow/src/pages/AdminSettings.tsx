@@ -284,7 +284,7 @@ const AdminSettings: React.FC = () => {
                     <Label htmlFor="frontend_url">Frontend Base URL</Label>
                     <Input
                       id="frontend_url"
-                      placeholder="http://localhost:3000"
+                      placeholder="http://localhost:8080"
                       {...register('frontend_url', { 
                         required: true,
                         pattern: /^(https?:\/\/.+)$/

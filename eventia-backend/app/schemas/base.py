@@ -7,6 +7,7 @@ Base Pydantic schemas for API responses
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 from pydantic import BaseModel, Field
 from pydantic.generics import GenericModel
+from datetime import datetime
 
 
 # Generic type for data in responses
@@ -35,3 +36,8 @@ class ErrorResponse(BaseModel):
     code: Optional[str] = None
     path: Optional[str] = None
     timestamp: Optional[str] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }

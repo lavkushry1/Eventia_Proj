@@ -26,6 +26,11 @@ class EventBase(BaseModel):
         ..., description="Event status"
     )
 
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
 
 class EventCreate(EventBase):
     """Schema for creating a new event"""
@@ -55,12 +60,21 @@ class EventInDB(EventBase):
 
     class Config:
         orm_mode = True
+        from_attributes = True
+        populate_by_name = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 # Response schemas to match frontend expectations
-class EventListResponse(PaginatedResponse):
+class EventListResponse(BaseModel):
     """Schema for paginated list of events"""
     items: List[EventInDB]
+    total: int = Field(..., description="Total number of items")
+    page: int = Field(..., description="Current page number")
+    limit: int = Field(..., description="Number of items per page")
+    total_pages: int = Field(..., description="Total number of pages")
 
 
 class EventResponse(ApiResponse):

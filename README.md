@@ -82,7 +82,7 @@ npm install
 npm run dev
 ```
 
-Frontend runs at 👉 [http://localhost:3000](http://localhost:3000)  
+Frontend runs at 👉 [http://localhost:8080](http://localhost:8080)  
 
 ---
 
@@ -96,7 +96,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Backend runs at 👉 [http://localhost:8000](http://localhost:8000)  
+Backend runs at 👉 [http://localhost:3000](http://localhost:3000)  
 
 ---
 
@@ -291,13 +291,13 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at [http://localhost:3000](http://localhost:3000)
+The frontend will be available at [http://localhost:8080](http://localhost:8080)
 
 ### 3. Verify MongoDB Connection
 
 To verify your MongoDB connection is working:
 
-1. Access the FastAPI Swagger UI at [http://localhost:8000/docs](http://localhost:8000/docs)
+1. Access the FastAPI Swagger UI at [http://localhost:3000/docs](http://localhost:3000/docs)
 2. Try using the `/events` GET endpoint to check if data is being fetched from MongoDB
 
 ## How can I deploy this project?
@@ -385,9 +385,9 @@ docker-compose -f docker-compose.dev.yml up
 ```
 
 Access the application:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- Frontend: http://localhost:8080
+- Backend API: http://localhost:3000
+- API Documentation: http://localhost:3000/docs
 
 ### Production
 
@@ -737,7 +737,7 @@ The Eventia Ticketing Platform can be deployed using Docker containers for both 
    docker-compose -f docker-compose.dev.yml up
    ```
 3. The services will be available at:
-   - Frontend: http://localhost:3000
+   - Frontend: http://localhost:8080
    - Backend API: http://localhost:3000/api
    - MongoDB: localhost:27017
 

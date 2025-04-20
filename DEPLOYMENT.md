@@ -26,8 +26,8 @@ This guide provides instructions for deploying the Eventia Ticketing Platform in
    ```
 
 3. Access the application:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3003/api
+   - Frontend: http://localhost:8080
+   - Backend API: http://localhost:3000/api
    - MongoDB: mongodb://localhost:27017/eventia
 
 ### Option 2: Manual Setup
@@ -122,7 +122,7 @@ This guide provides instructions for deploying the Eventia Ticketing Platform in
 | Variable | Description | Default |
 |----------|-------------|---------|
 | ADMIN_TOKEN | Token for admin authentication | supersecuretoken123 |
-| PORT | Backend server port | 3003 |
+| PORT | Backend server port | 3000 |
 | FLASK_ENV | Environment (development/production) | production |
 | MONGO_URI | MongoDB connection string | mongodb://mongodb:27017/eventia |
 

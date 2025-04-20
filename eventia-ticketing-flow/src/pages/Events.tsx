@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
@@ -8,68 +8,64 @@ import { Input } from '@/components/ui/input';
 import { api, fetchEvents } from '@/lib/api';
 import { EventResponse } from '@/lib/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { mapApiEventToUIEvent } from '@/lib/adapters';
 
 const Events = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [categories, setCategories] = useState<string[]>(['All']);
 
-  // Fetch events from API
-  const { data: apiEvents, isLoading, error } = useQuery({
+  // Fetch events from API with improved error handling
+  const { 
+    data, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useQuery({
     queryKey: ['events', selectedCategory],
     queryFn: async () => {
-      const response = await fetchEvents({ category: selectedCategory || undefined });
-      return response.events || [];
+      try {
+        return await fetchEvents({ category: selectedCategory || undefined });
+      } catch (err) {
+        console.error('Error fetching events:', err);
+        throw err;
+      }
     }
   });
 
-  // Map API events to UI events
-  const events = apiEvents?.map((event: EventResponse) => ({
-    id: event.id,
-    title: event.name,
-    description: event.description || '',
-    category: event.category,
-    venue: event.venue_id || '',
-    date: event.date,
-    time: event.time,
-    duration: '2 hours', // Default duration since it's not in the API response
-    ticketTypes: [{
-      category: 'General Admission',
-      price: event.price,
-      available: event.availableTickets
-    }],
-    image: event.posterImage || '',
-    featured: event.isFeatured,
-    teams: event.teamOne && event.teamTwo ? {
-      team1: {
-        name: event.teamOne,
-        shortName: event.teamOne,
-        logo: event.teamOneLogo || '',
-        color: ''
-      },
-      team2: {
-        name: event.teamTwo,
-        shortName: event.teamTwo,
-        logo: event.teamTwoLogo || '',
-        color: ''
-      }
-    } : undefined
-  })) || [];
+  // Debug API response structure
+  useEffect(() => {
+    if (data) {
+      console.debug('API Response Structure:', data);
+    }
+  }, [data]);
 
-  // Get all unique categories from our events
-  const categories = ['All'];
-  
-  if (events.length > 0) {
-    const uniqueCategories = [...new Set(events.map(event => event.category))];
-    categories.push(...uniqueCategories);
-  }
+  // Extract and set categories from events data
+  useEffect(() => {
+    if (data?.events && data.events.length > 0) {
+      const uniqueCategories = [...new Set(data.events.map(event => event.category).filter(Boolean))];
+      setCategories(['All', ...uniqueCategories]);
+    }
+  }, [data?.events]);
+
+  // Map API events to UI events using our adapter function
+  const events = (data?.events || []).map(event => mapApiEventToUIEvent(event));
 
   // Filter events based on search term
   const filteredEvents = events.filter(event => {
-    const matchesSearch = 
-      (event.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-      (event.description?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (event.title?.toLowerCase() || '').includes(searchLower) || 
+      (event.description?.toLowerCase() || '').includes(searchLower)
+    );
   });
+
+  // Handle error retry
+  const handleRetry = () => {
+    refetch();
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -106,7 +102,7 @@ const Events = () => {
                   <button
                     key={category}
                     className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
-                      selectedCategory === category 
+                      selectedCategory === (category === 'All' ? '' : category) 
                         ? 'bg-primary text-white' 
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
@@ -131,7 +127,15 @@ const Events = () => {
             ) : error ? (
               <Alert variant="destructive" className="mb-6">
                 <AlertDescription>
-                  {error instanceof Error ? error.message : 'Failed to load events. Please try again.'}
+                  <div className="flex flex-col">
+                    <p>{error instanceof Error ? error.message : 'Failed to load events. Please try again.'}</p>
+                    <button 
+                      onClick={handleRetry}
+                      className="mt-2 bg-red-100 text-red-800 px-4 py-2 rounded text-sm font-medium"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 </AlertDescription>
               </Alert>
             ) : filteredEvents.length > 0 ? (

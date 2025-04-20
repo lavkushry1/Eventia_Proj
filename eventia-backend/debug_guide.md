@@ -33,7 +33,7 @@ The `/metrics` endpoint provides Prometheus-compatible metrics:
 - Request counts and error rates
 - Function execution times
 
-Access the metrics at: `http://localhost:3000/metrics`
+Access the metrics at: `http://localhost:0/metrics`
 
 ## 3. Health Checks
 

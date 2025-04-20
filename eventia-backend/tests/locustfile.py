@@ -111,4 +111,4 @@ class EventTicketingUser(HttpUser):
 # Run the load test:
 # locust -f tests/locustfile.py --host=http://localhost:3000 --users=1000 --spawn-rate=10
 # For headless mode:
-# locust -f tests/locustfile.py --host=http://localhost:3000 --users=1000 --spawn-rate=10 --run-time=5m --headless --html=locust-report.html
+# locust -f tests/locustfile.py --host=http://localhost:3000 --users=1000 --spawn-rate=10 --run-time=5m --headless --html=locust-report.html 
