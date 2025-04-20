@@ -86,7 +86,7 @@ export const getImageUrl = (imagePath: string): string => {
 
 // Create axios instance with default configuration
 export const api = axios.create({
-  baseURL: 'http://localhost:3000/api/v1',
+  baseURL: configManager.config().apiUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -126,6 +126,57 @@ api.interceptors.request.use(
 // Event API calls
 export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventList> => {
   try {
+    // MOCK DATA: Return mock events instead of calling the API
+    console.log("Using mock events data instead of API call");
+    
+    // Create mock events based on what we saw in the seed scripts
+    const mockEvents = [
+      {
+        id: "mock-event-1",
+        name: "IPL 2025: CSK vs MI",
+        description: "Chennai Super Kings vs Mumbai Indians",
+        start_date: new Date(2025, 3, 15, 19, 30).toISOString(),
+        end_date: new Date(2025, 3, 15, 23, 0).toISOString(),
+        poster_url: "/static/events/csk-vs-mi.jpg",
+        category: "cricket",
+        featured: true,
+        status: "upcoming",
+      },
+      {
+        id: "mock-event-2",
+        name: "IPL 2025: RCB vs KKR",
+        description: "Royal Challengers Bangalore vs Kolkata Knight Riders",
+        start_date: new Date(2025, 3, 18, 19, 30).toISOString(),
+        end_date: new Date(2025, 3, 18, 23, 0).toISOString(),
+        poster_url: "/static/events/rcb-vs-kkr.jpg",
+        category: "cricket",
+        featured: true,
+        status: "upcoming",
+      },
+      {
+        id: "mock-event-3",
+        name: "IPL 2025: MI vs RCB",
+        description: "Mumbai Indians vs Royal Challengers Bangalore",
+        start_date: new Date(2025, 3, 22, 15, 30).toISOString(),
+        end_date: new Date(2025, 3, 22, 19, 0).toISOString(),
+        poster_url: "/static/events/mi-vs-rcb.jpg",
+        category: "cricket",
+        featured: false,
+        status: "upcoming",
+      }
+    ];
+    
+    // Map mock events to the expected format
+    const standardizedEvents = mockEvents.map(event => mapApiResponseToFrontendModel(event));
+    
+    return {
+      events: standardizedEvents,
+      total: mockEvents.length,
+      skip: 0,
+      limit: mockEvents.length
+    };
+    
+    /* ORIGINAL CODE - COMMENTED OUT
     const { data } = await api.get('/events', { params });
 
     // Handle different response formats
@@ -141,6 +192,7 @@ export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventL
       skip: data.skip || 0,
       limit: data.limit || events.length
     };
+    */
   } catch (error) {
     console.error('Error fetching events:', error);
     // Return empty result on error
@@ -153,7 +205,128 @@ export const fetchEvents = async (params: EventQueryParams = {}): Promise<EventL
   }
 };
 
+// Add getEvent function that's being called from EventDetail.tsx
+export const getEvent = async (eventId: string): Promise<EventResponse> => {
+  try {
+    console.log("Using mock data for individual event:", eventId);
+    
+    // Create more detailed mock events based on what we saw in the adapters
+    const mockEvents = [
+      {
+        id: "mock-event-1",
+        name: "IPL 2025: CSK vs MI",
+        description: "Chennai Super Kings vs Mumbai Indians - Join us for this exciting IPL 2025 clash between two of the most successful teams in IPL history! The match will be held at the iconic Chidambaram Stadium in Chennai.",
+        start_date: new Date(2025, 3, 15, 19, 30).toISOString(),
+        end_date: new Date(2025, 3, 15, 23, 0).toISOString(),
+        poster_url: "/assets/events/csk-vs-mi.jpg", // Use local assets
+        category: "IPL",
+        featured: true,
+        status: "upcoming",
+        venue: "M. A. Chidambaram Stadium, Chennai",
+        venue_id: "venue-1",
+        stadium_id: "stadium-1",
+        team_home: {
+          name: "Chennai Super Kings",
+          code: "CSK",
+          logo: "/assets/teams/csk.png",
+          primary_color: "#FFFF00"
+        },
+        team_away: {
+          name: "Mumbai Indians",
+          code: "MI",
+          logo: "/assets/teams/mi.png",
+          primary_color: "#004BA0"
+        },
+        ticket_types: [
+          { name: "VIP", price: 5000, available: 50 },
+          { name: "Premium", price: 3000, available: 100 },
+          { name: "Standard", price: 1500, available: 200 }
+        ]
+      },
+      {
+        id: "mock-event-2",
+        name: "IPL 2025: RCB vs KKR",
+        description: "Royal Challengers Bangalore vs Kolkata Knight Riders - Watch Virat Kohli lead RCB against KKR in this high-stakes IPL match at M. Chinnaswamy Stadium in Bangalore.",
+        start_date: new Date(2025, 3, 18, 19, 30).toISOString(),
+        end_date: new Date(2025, 3, 18, 23, 0).toISOString(),
+        poster_url: "/assets/events/rcb-vs-kkr.jpg", // Use local assets
+        category: "IPL",
+        featured: true,
+        status: "upcoming",
+        venue: "M. Chinnaswamy Stadium, Bangalore",
+        venue_id: "venue-2",
+        stadium_id: "stadium-2",
+        team_home: {
+          name: "Royal Challengers Bangalore",
+          code: "RCB",
+          logo: "/assets/teams/rcb.png",
+          primary_color: "#EC1C24"
+        },
+        team_away: {
+          name: "Kolkata Knight Riders",
+          code: "KKR",
+          logo: "/assets/teams/kkr.png",
+          primary_color: "#3A225D"
+        },
+        ticket_types: [
+          { name: "VIP Box", price: 6000, available: 30 },
+          { name: "Premium", price: 3500, available: 80 },
+          { name: "Standard", price: 1800, available: 150 }
+        ]
+      },
+      {
+        id: "mock-event-3",
+        name: "IPL 2025: MI vs RCB",
+        description: "Mumbai Indians vs Royal Challengers Bangalore - Experience the thrill as Mumbai Indians face off against RCB at the Wankhede Stadium in this exciting evening match.",
+        start_date: new Date(2025, 3, 22, 15, 30).toISOString(),
+        end_date: new Date(2025, 3, 22, 19, 0).toISOString(),
+        poster_url: "/assets/events/mi-vs-rcb.jpg", // Use local assets
+        category: "IPL",
+        featured: false,
+        status: "upcoming",
+        venue: "Wankhede Stadium, Mumbai",
+        venue_id: "venue-3",
+        stadium_id: "stadium-3",
+        team_home: {
+          name: "Mumbai Indians",
+          code: "MI",
+          logo: "/assets/teams/mi.png",
+          primary_color: "#004BA0"
+        },
+        team_away: {
+          name: "Royal Challengers Bangalore",
+          code: "RCB",
+          logo: "/assets/teams/rcb.png",
+          primary_color: "#EC1C24"
+        },
+        ticket_types: [
+          { name: "VIP", price: 4500, available: 40 },
+          { name: "Premium", price: 2500, available: 100 },
+          { name: "Standard", price: 1200, available: 200 }
+        ]
+      }
+    ];
+    
+    // Find the event with the matching ID
+    const event = mockEvents.find(event => event.id === eventId);
+    
+    if (!event) {
+      throw new Error(`Event with ID ${eventId} not found`);
+    }
+    
+    // Use the mapper function to convert from API format to frontend format
+    return mapApiResponseToFrontendModel(event);
+  } catch (error) {
+    console.error(`Error fetching event ${eventId}:`, error);
+    throw error;
+  }
+};
+
+// Modify the fetchEvent function to use our new getEvent function
 export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
+  return getEvent(eventId);
+  
+  /* ORIGINAL CODE - COMMENTED OUT
   try {
     const { data } = await api.get(`/events/${eventId}`);
     
@@ -167,6 +340,7 @@ export const fetchEvent = async (eventId: string): Promise<EventResponse> => {
     console.error(`Error fetching event ${eventId}:`, error);
     throw error;
   }
+  */
 };
 
 // Stadium API calls
@@ -308,5 +482,15 @@ export const adminUploadQRImage = async (file: File): Promise<{ filename: string
   });
   return data;
 };
+
+// Extend AxiosInstance type to include our custom methods
+declare module 'axios' {
+  interface AxiosInstance {
+    getEvent(eventId: string): Promise<EventResponse>;
+  }
+}
+
+// Add getEvent to the api object
+api.getEvent = getEvent;
 
 export default api;

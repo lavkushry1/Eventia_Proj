@@ -15,14 +15,14 @@ from .base import PyObjectId, MongoBaseModel
 class EventModel(MongoBaseModel):
     """MongoDB model for Event collection"""
     
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: str = Field(default=None, alias="_id")
     name: str = Field(..., description="Event name")
     description: str = Field(..., description="Event description")
     category: str = Field(..., description="Event category")
     start_date: datetime = Field(..., description="Event start date and time")
     end_date: datetime = Field(..., description="Event end date and time")
-    venue_id: PyObjectId = Field(..., description="ID of the venue/stadium")
-    team_ids: List[PyObjectId] = Field(default_factory=list, description="IDs of teams participating")
+    venue_id: str = Field(..., description="ID of the venue/stadium")
+    team_ids: List[str] = Field(default_factory=list, description="IDs of teams participating")
     poster_url: Optional[str] = Field(None, description="URL to event poster image")
     featured: bool = Field(default=False, description="Whether the event is featured")
     status: str = Field(..., description="Event status: upcoming, ongoing, completed, cancelled")

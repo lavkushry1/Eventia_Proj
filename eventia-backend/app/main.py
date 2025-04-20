@@ -58,10 +58,22 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://localhost:3000"],  # Add your frontend URL
+    allow_origins=settings.cors_origins,  # Use dynamic property
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add rate limiter middleware
+app.add_middleware(
+    RateLimiter,
+    rate_limit=100,
+    time_window=60,
+    exempted_routes=[f"{settings.API_V1_STR}/health", "/docs", "/redoc", "/api/openapi.json"],
+    exempted_ips=["127.0.0.1"]
 )
 
 # Mount static files
@@ -80,7 +92,7 @@ app.include_router(seats.router, prefix=settings.API_V1_STR)
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     return get_swagger_ui_html(
-        openapi_url="/openapi.json",
+        openapi_url="/api/openapi.json",
         title=f"{settings.PROJECT_NAME} - Swagger UI",
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
@@ -121,7 +133,7 @@ async def startup_event():
     logger.info("Starting up Eventia API...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    logger.info(f"API URL: http://localhost:3000")
+    logger.info(f"API URL: {settings.API_BASE_URL}")
     logger.info(f"Frontend URL: {settings.FRONTEND_BASE_URL}")
 
 # Shutdown event
@@ -137,18 +149,6 @@ async def root():
         "version": settings.PROJECT_VERSION,
         "docs_url": "/docs",
     }
-
-# Add security headers middleware
-app.add_middleware(SecurityHeadersMiddleware)
-
-# Add rate limiter middleware
-app.add_middleware(
-    RateLimiter,
-    rate_limit=100,
-    time_window=60,
-    exempted_routes=[f"{settings.API_V1_STR}/health"],
-    exempted_ips=["127.0.0.1"]
-)
 
 # Register error handlers
 register_exception_handlers(app)

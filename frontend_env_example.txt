@@ -1,0 +1,22 @@
+# Frontend Environment File Example (.env for eventia-ticketing-flow)
+
+# API Configuration
+VITE_API_BASE_URL=http://localhost:3000/api/v1
+VITE_FRONTEND_BASE_URL=http://localhost:8080
+VITE_STATIC_BASE_URL=http://localhost:3000/static
+
+# Feature Flags
+VITE_ENABLE_ANALYTICS=false
+VITE_ENABLE_DEBUG=true
+
+# Payment Configuration
+VITE_PAYMENT_ENABLED=true
+VITE_MERCHANT_NAME=Eventia Payments
+VITE_PAYMENT_VPA=eventia@upi
+
+# Path Configuration
+VITE_STATIC_BASE_PATH=/static
+
+# App Behavior Settings
+VITE_REFRESH_INTERVAL=300000
+VITE_MAX_BOOKING_TIME=600000

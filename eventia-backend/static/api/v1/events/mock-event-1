@@ -1,0 +1,31 @@
+{
+  "id": "mock-event-1",
+  "name": "IPL 2025: CSK vs MI",
+  "description": "Chennai Super Kings vs Mumbai Indians - Join us for this exciting IPL 2025 clash between two of the most successful teams in IPL history! The match will be held at the iconic Chidambaram Stadium in Chennai.",
+  "start_date": "2025-04-15T19:30:00Z",
+  "end_date": "2025-04-15T23:00:00Z",
+  "poster_url": "/assets/events/csk-vs-mi.jpg",
+  "category": "IPL",
+  "featured": true,
+  "status": "upcoming",
+  "venue": "M. A. Chidambaram Stadium, Chennai",
+  "venue_id": "venue-1",
+  "stadium_id": "stadium-1",
+  "team_home": {
+    "name": "Chennai Super Kings",
+    "code": "CSK",
+    "logo": "/assets/teams/csk.png",
+    "primary_color": "#FFFF00"
+  },
+  "team_away": {
+    "name": "Mumbai Indians",
+    "code": "MI",
+    "logo": "/assets/teams/mi.png",
+    "primary_color": "#004BA0"
+  },
+  "ticket_types": [
+    { "name": "VIP", "price": 5000, "available": 50 },
+    { "name": "Premium", "price": 3000, "available": 100 },
+    { "name": "Standard", "price": 1500, "available": 200 }
+  ]
+} 

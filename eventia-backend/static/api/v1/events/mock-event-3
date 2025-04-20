@@ -1,0 +1,31 @@
+{
+  "id": "mock-event-3",
+  "name": "IPL 2025: MI vs RCB",
+  "description": "Mumbai Indians vs Royal Challengers Bangalore - Experience the thrill as Mumbai Indians face off against RCB at the Wankhede Stadium in this exciting evening match.",
+  "start_date": "2025-04-22T15:30:00Z",
+  "end_date": "2025-04-22T19:00:00Z",
+  "poster_url": "/assets/events/mi-vs-rcb.jpg",
+  "category": "IPL",
+  "featured": false,
+  "status": "upcoming",
+  "venue": "Wankhede Stadium, Mumbai",
+  "venue_id": "venue-3",
+  "stadium_id": "stadium-3",
+  "team_home": {
+    "name": "Mumbai Indians",
+    "code": "MI",
+    "logo": "/assets/teams/mi.png",
+    "primary_color": "#004BA0"
+  },
+  "team_away": {
+    "name": "Royal Challengers Bangalore",
+    "code": "RCB",
+    "logo": "/assets/teams/rcb.png",
+    "primary_color": "#EC1C24"
+  },
+  "ticket_types": [
+    { "name": "VIP", "price": 4500, "available": 40 },
+    { "name": "Premium", "price": 2500, "available": 100 },
+    { "name": "Standard", "price": 1200, "available": 200 }
+  ]
+} 

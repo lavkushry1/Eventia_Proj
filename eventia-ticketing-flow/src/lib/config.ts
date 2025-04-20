@@ -20,8 +20,8 @@ const defaultConfig: Config = {
 // Load configuration from environment variables if available
 const loadConfig = (): Config => {
   return {
-    apiUrl: import.meta.env.VITE_API_URL || defaultConfig.apiUrl,
-    staticUrl: import.meta.env.VITE_STATIC_URL || defaultConfig.staticUrl,
+    apiUrl: import.meta.env.VITE_API_BASE_URL || defaultConfig.apiUrl,
+    staticUrl: import.meta.env.VITE_STATIC_BASE_URL || defaultConfig.staticUrl,
     debug: import.meta.env.VITE_DEBUG === 'true' || defaultConfig.debug
   };
 };
@@ -80,4 +80,4 @@ class ConfigManager {
 
 // Export a singleton instance
 const configManager = ConfigManager.getInstance();
-export default configManager; 
+export default configManager;

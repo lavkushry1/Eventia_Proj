@@ -1,0 +1,53 @@
+{
+  "items": [
+    {
+      "id": "5f8d43e5e6b06f1b8c7a4e5d",
+      "name": "IPL 2025: CSK vs MI",
+      "description": "Chennai Super Kings vs Mumbai Indians",
+      "start_date": "2025-04-15T19:30:00Z",
+      "end_date": "2025-04-15T23:00:00Z",
+      "venue_id": "5f8d43e5e6b06f1b8c7a4e5a",
+      "team_ids": ["5f8d43e5e6b06f1b8c7a4e56", "5f8d43e5e6b06f1b8c7a4e57"],
+      "poster_url": "/static/events/csk-vs-mi.jpg",
+      "category": "cricket",
+      "featured": true,
+      "status": "upcoming",
+      "created_at": "2023-11-15T10:00:00Z",
+      "updated_at": "2023-11-15T10:00:00Z"
+    },
+    {
+      "id": "5f8d43e5e6b06f1b8c7a4e5e",
+      "name": "IPL 2025: RCB vs KKR",
+      "description": "Royal Challengers Bangalore vs Kolkata Knight Riders",
+      "start_date": "2025-04-18T19:30:00Z",
+      "end_date": "2025-04-18T23:00:00Z",
+      "venue_id": "5f8d43e5e6b06f1b8c7a4e5c",
+      "team_ids": ["5f8d43e5e6b06f1b8c7a4e58", "5f8d43e5e6b06f1b8c7a4e59"],
+      "poster_url": "/static/events/rcb-vs-kkr.jpg",
+      "category": "cricket",
+      "featured": true,
+      "status": "upcoming",
+      "created_at": "2023-11-15T10:00:00Z",
+      "updated_at": "2023-11-15T10:00:00Z"
+    },
+    {
+      "id": "5f8d43e5e6b06f1b8c7a4e5f",
+      "name": "IPL 2025: MI vs RCB",
+      "description": "Mumbai Indians vs Royal Challengers Bangalore",
+      "start_date": "2025-04-22T15:30:00Z",
+      "end_date": "2025-04-22T19:00:00Z",
+      "venue_id": "5f8d43e5e6b06f1b8c7a4e5b",
+      "team_ids": ["5f8d43e5e6b06f1b8c7a4e57", "5f8d43e5e6b06f1b8c7a4e58"],
+      "poster_url": "/static/events/mi-vs-rcb.jpg",
+      "category": "cricket",
+      "featured": false,
+      "status": "upcoming",
+      "created_at": "2023-11-15T10:00:00Z",
+      "updated_at": "2023-11-15T10:00:00Z"
+    }
+  ],
+  "total": 3,
+  "page": 1,
+  "limit": 10,
+  "total_pages": 1
+} 

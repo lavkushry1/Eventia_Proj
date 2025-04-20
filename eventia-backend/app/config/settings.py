@@ -19,21 +19,40 @@ class Settings(BaseSettings):
 
     # API configuration
     API_V1_STR: str = "/api/v1"
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 3000
-    API_PREFIX: str = "/api"
-    API_BASE_URL: str = "http://localhost:3000"
-    API_DOMAIN: str = "localhost"
+    API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
+    API_PORT: int = int(os.getenv("API_PORT", "3000"))
+    API_PREFIX: str = os.getenv("API_PREFIX", "/api")
+    API_BASE_URL: str = os.getenv("API_BASE_URL", "http://localhost:3000")
+    API_DOMAIN: str = os.getenv("API_DOMAIN", "localhost")
 
     # CORS configuration
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    CORS_ORIGINS: List[str] = []
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Dynamically build CORS origins list from environment variables"""
+        origins = self.CORS_ORIGINS.copy()
+        
+        # Always include API and Frontend URLs
+        if self.API_BASE_URL and self.API_BASE_URL not in origins:
+            origins.append(self.API_BASE_URL)
+            
+        if self.FRONTEND_BASE_URL and self.FRONTEND_BASE_URL not in origins:
+            origins.append(self.FRONTEND_BASE_URL)
+            
+        # If empty, add localhost defaults for development
+        if not origins:
+            origins = ["http://localhost:3000", "http://localhost:8080"]
+            
+        return origins
     
     # Logging configuration
     LOG_LEVEL: str = "DEBUG"
     ROOT_PATH: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     # MongoDB configuration
-    MONGODB_URL: Optional[str] = "mongodb://frdweb12:G5QMAprruao49p2u@mongodb-shard-00-00.s8fgq.mongodb.net:27017,mongodb-shard-00-01.s8fgq.mongodb.net:27017,mongodb-shard-00-02.s8fgq.mongodb.net:27017/?replicaSet=atlas-11uw3h-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority&appName=MongoDB"
+    # Use local MongoDB instance to avoid SSL issues
+    MONGODB_URL: Optional[str] = "mongodb://localhost:27017/eventia"
     MONGODB_DB: str = "eventia"
 
     # For backward compatibility
@@ -77,7 +96,7 @@ class Settings(BaseSettings):
     DEFAULT_PAYMENT_DESC: str = "Payment for event tickets"
 
     # Frontend URL
-    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:8080")
 
     # Environment
     ENVIRONMENT: str = "dev"

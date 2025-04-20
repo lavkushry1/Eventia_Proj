@@ -3,11 +3,14 @@
 # API Health Check Script for Eventia Backend
 # This script checks if all API endpoints are responding correctly
 
-API_BASE="http://localhost:3000/api"
+# Use environment variables with fallbacks for API URL
+API_BASE="${API_BASE_URL:-http://localhost:3000}/api"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
+
+echo "Using API base URL: $API_BASE"
 
 # Function to check an endpoint
 check_endpoint() {
@@ -61,4 +64,4 @@ rm -f response.json
 
 echo "========================================="
 echo "Health check completed"
-echo "=========================================" 
+echo "========================================="

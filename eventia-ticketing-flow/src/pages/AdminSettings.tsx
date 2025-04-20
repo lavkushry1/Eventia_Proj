@@ -284,7 +284,7 @@ const AdminSettings: React.FC = () => {
                     <Label htmlFor="frontend_url">Frontend Base URL</Label>
                     <Input
                       id="frontend_url"
-                      placeholder="http://localhost:8080"
+                      placeholder={import.meta.env.VITE_FRONTEND_BASE_URL || "http://localhost:8080"}
                       {...register('frontend_url', { 
                         required: true,
                         pattern: /^(https?:\/\/.+)$/
@@ -337,7 +337,7 @@ const AdminSettings: React.FC = () => {
                 setValue('vpa_address', config.PAYMENT_VPA);
                 setValue('frontend_url', config.DOMAIN);
                 setValue('payment_mode', 'vpa');
-                setIsQrMode(false);
+                setUploadedQrPreview(null);
                 setCurrentQrImageUrl(config.QR_IMAGE_URL);
               }}
               disabled={isLoading}

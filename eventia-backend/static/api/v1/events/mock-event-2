@@ -1,0 +1,31 @@
+{
+  "id": "mock-event-2",
+  "name": "IPL 2025: RCB vs KKR",
+  "description": "Royal Challengers Bangalore vs Kolkata Knight Riders - Watch Virat Kohli lead RCB against KKR in this high-stakes IPL match at M. Chinnaswamy Stadium in Bangalore.",
+  "start_date": "2025-04-18T19:30:00Z",
+  "end_date": "2025-04-18T23:00:00Z",
+  "poster_url": "/assets/events/rcb-vs-kkr.jpg",
+  "category": "IPL",
+  "featured": true,
+  "status": "upcoming",
+  "venue": "M. Chinnaswamy Stadium, Bangalore",
+  "venue_id": "venue-2",
+  "stadium_id": "stadium-2",
+  "team_home": {
+    "name": "Royal Challengers Bangalore",
+    "code": "RCB",
+    "logo": "/assets/teams/rcb.png",
+    "primary_color": "#EC1C24"
+  },
+  "team_away": {
+    "name": "Kolkata Knight Riders",
+    "code": "KKR",
+    "logo": "/assets/teams/kkr.png",
+    "primary_color": "#3A225D"
+  },
+  "ticket_types": [
+    { "name": "VIP Box", "price": 6000, "available": 30 },
+    { "name": "Premium", "price": 3500, "available": 80 },
+    { "name": "Standard", "price": 1800, "available": 150 }
+  ]
+} 

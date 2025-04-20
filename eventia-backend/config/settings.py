@@ -23,15 +23,36 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours
     
     # CORS
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str] = []
     
     @validator("CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+    def assemble_cors_origins(cls, v: Union[str, List[str]], values: Dict[str, Any]) -> Union[List[str], str]:
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):
             return v
         raise ValueError(v)
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Get a combined list of CORS origins including API and Frontend URLs"""
+        origins = self.CORS_ORIGINS.copy() if isinstance(self.CORS_ORIGINS, list) else []
+        
+        # Always include API and Frontend URLs
+        api_url = self.API_BASE_URL
+        frontend_url = self.FRONTEND_BASE_URL
+        
+        if api_url and api_url not in origins:
+            origins.append(api_url)
+        
+        if frontend_url and frontend_url not in origins:
+            origins.append(frontend_url)
+            
+        # If still empty, add localhost defaults for development
+        if not origins:
+            origins = ["http://localhost:3000", "http://localhost:8080"]
+            
+        return origins
     
     # MongoDB
     MONGO_HOST: str = os.getenv("MONGO_HOST", "localhost")
@@ -96,4 +117,4 @@ class Settings(BaseSettings):
 
 
 # Export settings as a singleton
-settings = Settings() 
+settings = Settings()

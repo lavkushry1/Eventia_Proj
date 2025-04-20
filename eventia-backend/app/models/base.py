@@ -10,7 +10,7 @@ from bson import ObjectId
 from pydantic import BaseModel, Field, ConfigDict
 
 
-class PyObjectId(ObjectId):
+class PyObjectId(str):
     """Custom type for ObjectId to work with Pydantic"""
     
     @classmethod
@@ -19,27 +19,13 @@ class PyObjectId(ObjectId):
     
     @classmethod
     def validate(cls, v):
-        if not isinstance(v, ObjectId):
-            if not ObjectId.is_valid(v):
-                raise ValueError("Invalid ObjectId")
-            v = ObjectId(v)
-        return v
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return str(ObjectId(v))
     
     @classmethod
     def __get_pydantic_json_schema__(cls, _schema_generator, _field):
         return {"type": "string"}
-    
-    # For Pydantic v2 compatibility - simplified version
-    @classmethod
-    def __get_pydantic_core_schema__(cls, _source_type, _handler):
-        # Return a simple schema that doesn't use pydantic_core functions
-        return {"type": "string"}
-    
-    def __repr__(self):
-        return str(self)
-    
-    def __str__(self):
-        return str(super().__str__())
 
 
 class MongoBaseModel(BaseModel):
@@ -78,6 +64,10 @@ class MongoBaseModel(BaseModel):
         if data.get("id") and not data.get("_id"):
             data["_id"] = data.pop("id")
             
+        # Convert ObjectId to string
+        if "_id" in data and isinstance(data["_id"], ObjectId):
+            data["_id"] = str(data["_id"])
+            
         # Return the model instance
         try:
             return cls.model_validate(data)
@@ -103,5 +93,12 @@ class MongoBaseModel(BaseModel):
         for field_name in ["id", "created_at", "updated_at"]:
             if field_name in data and not data.get(field_name):
                 data.pop(field_name, None)
+                
+        # Convert string _id to ObjectId
+        if "_id" in data and not isinstance(data["_id"], ObjectId):
+            try:
+                data["_id"] = ObjectId(data["_id"])
+            except:
+                pass
                 
         return data

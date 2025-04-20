@@ -14,9 +14,9 @@ interface Config {
 }
 
 const config: Config = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
-  FRONTEND_BASE_URL: import.meta.env.VITE_FRONTEND_BASE_URL || 'http://localhost:5173',
-  STATIC_BASE_URL: import.meta.env.VITE_STATIC_BASE_URL || 'http://localhost:8000/static',
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1',
+  FRONTEND_BASE_URL: import.meta.env.VITE_FRONTEND_BASE_URL || 'http://localhost:8080',
+  STATIC_BASE_URL: import.meta.env.VITE_STATIC_BASE_URL || 'http://localhost:3000/static',
   TEAM_LOGOS_PATH: '/teams',
   EVENT_IMAGES_PATH: '/events',
   STADIUM_IMAGES_PATH: '/stadiums',
@@ -28,4 +28,4 @@ const config: Config = {
   ENABLE_DEBUG: import.meta.env.VITE_ENABLE_DEBUG === 'true',
 };
 
-export default config; 
+export default config;

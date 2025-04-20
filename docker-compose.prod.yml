@@ -13,7 +13,7 @@ services:
       - "80:80"
     environment:
       - NODE_ENV=production
-      - REACT_APP_API_URL=https://api.eventia.com/api
+      - REACT_APP_API_URL=${API_BASE_URL:-https://api.eventia.com}/api
     depends_on:
       - backend
     networks:
@@ -37,6 +37,8 @@ services:
       - PORT=3000
       - MONGO_URI=mongodb://mongodb:27017/eventia
       - ADMIN_TOKEN=${ADMIN_TOKEN:-supersecuretoken123}
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:3000}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:8080}
     depends_on:
       - mongodb
     networks:
